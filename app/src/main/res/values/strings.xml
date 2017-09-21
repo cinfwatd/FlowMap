@@ -1,4 +1,10 @@
 <resources>
     <string name="app_name">FlowMap</string>
     <string name="title_activity_maps">Map</string>
+    <string name="alert_dialog_ok">OK</string>
+    <string name="alert_dialog_cancel">Cancel</string>
+    <string name="location_request_rationale">%1$s uses your location to document places you go.
+        It\'s completely private and secure, and you can turn it off anytime</string>
+    <string name="location_request_rationale_title">\"%1$s\" Would like to
+        use your current location</string>
 </resources>
