@@ -1,3 +1,27 @@
+/**
+ * MIT License
+ *
+ * Copyright (c) 2017 Cinfwat Dogak
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package me.dcii.flowmap;
 
 import android.Manifest;
@@ -24,6 +48,11 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 
+/**
+ * Presents the map to the user.
+ *
+ * @author Dogak Cinfwat.
+ */
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
     private static final int REQUEST_CODE_LOCATION = 1;
@@ -43,11 +72,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     /**
      * Manipulates the map once available.
      * This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
-     * If Google Play services is not installed on the device, the user will be prompted to install
-     * it inside the SupportMapFragment. This method will only be triggered once the user has
-     * installed Google Play services and returned to the app.
      */
     @Override
     public void onMapReady(GoogleMap googleMap) {
@@ -55,6 +79,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         initialiseMap();
     }
 
+    /**
+     * Initialises map and zoom-in on the current user location when location permission is granted.
+     */
     private void initialiseMap() {
         if (checkLocationPermission()) {
             LocationManager locationManager = (LocationManager)
@@ -88,6 +115,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
+    /**
+     * Checks for location permission on devices running Android M or greater and request for
+     * permission when not already granted.
+     *
+     * @return the permission status. If false, it initiates the permission request process.
+     */
     private boolean checkLocationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
 
@@ -107,6 +140,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return true;
     }
 
+    /**
+     * Does the actual permission request.
+     */
     private void requestLocationPermission() {
         ActivityCompat.requestPermissions(this,
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
@@ -129,6 +165,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
+    /**
+     * Creates a dialog to explain to the user the rationale for requesting location.
+     */
     public static class LocationRationaleDialogFragment extends DialogFragment {
 
         public static LocationRationaleDialogFragment newInstance() {
@@ -155,12 +194,19 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
+    /**
+     * Shows a dialog explaining to the user the rationale for requesting location.
+     */
     private void showRationaleDialog() {
         final DialogFragment newFragment = LocationRationaleDialogFragment.newInstance();
         newFragment.show(getSupportFragmentManager(),
                 getString(R.string.location_request_rationale));
     }
 
+    /**
+     * Handles user closing the dialog from {@link #showRationaleDialog()} by requesting
+     * for the location once more.
+     */
     private void doPositiveClick() {
         requestLocationPermission();
     }
