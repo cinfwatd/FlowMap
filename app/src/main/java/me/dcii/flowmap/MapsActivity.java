@@ -1,25 +1,25 @@
-/**
- * MIT License
- *
- * Copyright (c) 2017 Cinfwat Dogak
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+/*
+  MIT License
+
+  Copyright (c) 2017 Cinfwat Dogak
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
  */
 
 package me.dcii.flowmap;
@@ -29,8 +29,8 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
-import android.location.Criteria;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -46,6 +46,7 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 /**
@@ -57,6 +58,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private static final int REQUEST_CODE_LOCATION = 1;
     private GoogleMap mMap;
+    private Marker mMarker = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,38 +82,90 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     /**
-     * Initialises map and zoom-in on the current user location when location permission is granted.
+     * Initialises map the current user location when location permission is granted.
      */
     private void initialiseMap() {
         if (checkLocationPermission()) {
-            LocationManager locationManager = (LocationManager)
+
+            // Get reference to system location manager
+            final LocationManager locationManager = (LocationManager)
                     getSystemService(Context.LOCATION_SERVICE);
             Location location = null;
 
             if (locationManager != null) {
-                final Criteria criteria = new Criteria();
+                // Define listener that responds to location updates
+                final LocationListener locationListener = new LocationListener() {
+                    @Override
+                    public void onLocationChanged(Location location) {
+                        updateLocation(location);
+                    }
 
+                    @Override
+                    public void onStatusChanged(String s, int i, Bundle bundle) {}
+
+                    @Override
+                    public void onProviderEnabled(String s) {
+//                      TODO: check provider type and user it, maybe?
+                    }
+
+                    @Override
+                    public void onProviderDisabled(String s) {
+//                      TODO: check provider type and respond, maybe a message to the user.
+                    }
+                };
+
+                final long minTime = 0;  // minimum time interval between notifications.
+                final float minDistance = 0;  // minimum distance between notifications.
+                final String networkLocationProvider = LocationManager.NETWORK_PROVIDER;
+                final String gpsLocationProvider = LocationManager.GPS_PROVIDER;
+
+//                Register location listener with location manager to receive updates.
+                locationManager.requestLocationUpdates(
+                        networkLocationProvider, minTime, minDistance, locationListener);
+                locationManager.requestLocationUpdates(
+                        gpsLocationProvider, minTime, minDistance, locationListener);
+
+//                Get quick fix location with the network provider.
                 location = locationManager
-                        .getLastKnownLocation(locationManager
-                                .getBestProvider(criteria, false));
+                        .getLastKnownLocation(networkLocationProvider);
             }
+            updateLocationAnimate(location);
+        }
+    }
 
-            if (location != null) {
-                final LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
-                final MarkerOptions markerOptions = new MarkerOptions();
-                markerOptions.position(latLng);
+    /**
+     * Zooms-in on current user location with some animation.
+     *
+     * @param location provided user location.
+     */
+    private void updateLocationAnimate(Location location) {
+        if (location != null) {
+            final LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+            final MarkerOptions markerOptions = new MarkerOptions();
+            markerOptions.position(latLng);
 
-                final int zoom = 13;
-                mMap.addMarker(markerOptions);
-                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
-                final CameraPosition cameraPosition = new CameraPosition.Builder()
-                        .target(latLng)
-                        .zoom(15)
-                        .bearing(90)
-                        .tilt(40)
-                        .build();
-                mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
-            }
+            final int zoom = 13;
+            mMarker = mMap.addMarker(markerOptions);
+            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
+            final CameraPosition cameraPosition = new CameraPosition.Builder()
+                    .target(latLng)
+                    .zoom(17)
+                    .bearing(90)
+                    .tilt(40)
+                    .build();
+            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
+        }
+    }
+
+    /**
+     * Updates user location with provided location information as frequently as possible.
+     *
+     * @param location provided user location.
+     */
+    private void updateLocation(Location location) {
+        if (location != null) {
+            final LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+            mMarker.setPosition(latLng);
         }
     }
 
