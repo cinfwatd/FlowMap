@@ -25,21 +25,37 @@
 package me.dcii.flowmap;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.Dialog;
-import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
-import android.os.Build;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Looper;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
+import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.FragmentActivity;
 import android.support.v7.app.AlertDialog;
+import android.view.View;
+import android.widget.Toast;
 
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.common.api.ResolvableApiException;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.LocationSettingsRequest;
+import com.google.android.gms.location.LocationSettingsResponse;
+import com.google.android.gms.location.LocationSettingsStatusCodes;
+import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -48,6 +64,13 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
+
+import java.text.DateFormat;
+import java.util.Date;
 
 /**
  * Presents the map to the user.
@@ -56,9 +79,83 @@ import com.google.android.gms.maps.model.MarkerOptions;
  */
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
+    /**
+     * Code used in requesting runtime location permission.
+     */
     private static final int REQUEST_CODE_LOCATION = 1;
+
+    /**
+     * Code used in checking settings
+     * TODO: update this comment.
+     */
+    private static final int REQUEST_CODE_CHECK_SETTINGS = 10;
+
+    /**
+     * Keys for storing activity state in bundle.
+     */
+    private static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting-location-update";
+    private static final String KEY_LOCATION = "last-location";
+    private static final String KEY_LAST_UPDATED_TIME = "last-updated-time";
+
+    /**
+     * The desired interval for location updates (milliseconds). Updates maybe more or less
+     * frequent.
+     */
+    private static final long UPDATE_INTERVAL = 10000;
+
+    /**
+     * The fastest rate for active location updates. Updates will not be more frequent than this
+     * value.
+     */
+    private static final long FASTEST_UPDATE_INTERVAL = UPDATE_INTERVAL / 2;
+
+    /**
+     * Represents the Google map object.
+     */
     private GoogleMap mMap;
     private Marker mMarker = null;
+
+    /**
+     * Provides access to the fused location provider API
+     */
+    private FusedLocationProviderClient mFusedLocationClient;
+
+    /**
+     * Provides access to the location settings Api.
+     */
+    private SettingsClient mSettingsClient;
+
+    /**
+     * Stores the types of location services the user is interested in using. Used for checking
+     * settings to determine if the device has optimal location settings.
+     */
+    private LocationSettingsRequest mLocationSettingsRequest;
+
+    /**
+     * Stores parameters for request to the FusedLocationProviderApi.
+     */
+    private LocationRequest mLocationRequest;
+
+    /**
+     * Keeps track of the location update request. Allows the user to start and stop
+     * the location tracking process.
+     */
+    private boolean mRequestingLocationUpdates = true;
+
+    /**
+     * Time when location was last updated represented as a string.
+     */
+    private String mLastUpdateTime = "";
+
+    /**
+     * Callback for the location events.
+     */
+    private LocationCallback mLocationCallback;
+
+    /**
+     * Represents the user's current geographical location at any given point.
+     */
+    private Location mCurrentLocation;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,6 +165,59 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+
+        // Updates values from previous instance of the activity.
+        updateValuesFromBundle(savedInstanceState);
+
+        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        mSettingsClient = LocationServices.getSettingsClient(this);
+
+        // Kick of the process of building the LocationCallback, LocationRequest, and
+        // LocationSettingsRequest objects.
+        createLocationCallback();
+        createLocationRequest();
+        buildLocationSettingsRequest();
+    }
+
+    /**
+     * Creates the callback for receiving location events.
+     */
+    private void createLocationCallback() {
+        mLocationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                super.onLocationResult(locationResult);
+
+                mCurrentLocation = locationResult.getLastLocation();
+                mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
+                updateLocation();
+            }
+        };
+    }
+
+    /**
+     * Creates the location request and sets the intervals and priority.
+     */
+    private void createLocationRequest() {
+        mLocationRequest = new LocationRequest();
+
+        // Sets the desired interval for active location updates.
+        mLocationRequest.setInterval(UPDATE_INTERVAL);
+
+        // Sets the fastest rate for active location updates.
+        mLocationRequest.setFastestInterval(FASTEST_UPDATE_INTERVAL);
+
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+    }
+
+    /**
+     * Uses the {@link LocationSettingsRequest.Builder} to build a {@link LocationSettingsRequest}
+     * that is used for checking if the user's device has the needed location settings.
+     */
+    private void buildLocationSettingsRequest() {
+        final LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder();
+        builder.addLocationRequest(mLocationRequest);
+        mLocationSettingsRequest = builder.build();
     }
 
 
@@ -78,72 +228,188 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
-        initialiseMap();
     }
 
     /**
-     * Initialises map the current user location when location permission is granted.
+     * Updates app state from provided previous instance of the activity.
+     *
+     * @param savedInstanceState previous activity instance bundle.
      */
-    private void initialiseMap() {
-        if (checkLocationPermission()) {
-
-            // Get reference to system location manager
-            final LocationManager locationManager = (LocationManager)
-                    getSystemService(Context.LOCATION_SERVICE);
-            Location location = null;
-
-            if (locationManager != null) {
-                // Define listener that responds to location updates
-                final LocationListener locationListener = new LocationListener() {
-                    @Override
-                    public void onLocationChanged(Location location) {
-                        updateLocation(location);
-                    }
-
-                    @Override
-                    public void onStatusChanged(String s, int i, Bundle bundle) {}
-
-                    @Override
-                    public void onProviderEnabled(String s) {
-//                      TODO: check provider type and user it, maybe?
-                    }
-
-                    @Override
-                    public void onProviderDisabled(String s) {
-//                      TODO: check provider type and respond, maybe a message to the user.
-                    }
-                };
-
-                final long minTime = 0;  // minimum time interval between notifications.
-                final float minDistance = 0;  // minimum distance between notifications.
-                final String networkLocationProvider = LocationManager.NETWORK_PROVIDER;
-                final String gpsLocationProvider = LocationManager.GPS_PROVIDER;
-
-//                Register location listener with location manager to receive updates.
-                locationManager.requestLocationUpdates(
-                        networkLocationProvider, minTime, minDistance, locationListener);
-                locationManager.requestLocationUpdates(
-                        gpsLocationProvider, minTime, minDistance, locationListener);
-
-//                Get quick fix location with the network provider.
-                location = locationManager
-                        .getLastKnownLocation(networkLocationProvider);
+    private void updateValuesFromBundle(Bundle savedInstanceState) {
+        if (savedInstanceState != null) {
+            // Update the value of mRequestingLocationUpdates.
+            if (savedInstanceState.keySet().contains(KEY_REQUESTING_LOCATION_UPDATES)) {
+                mRequestingLocationUpdates = savedInstanceState.getBoolean(
+                        KEY_REQUESTING_LOCATION_UPDATES);
             }
-            updateLocationAnimate(location);
+
+            // Update the value of mCurrentLocation.
+            if (savedInstanceState.keySet().contains(KEY_LOCATION)) {
+                mCurrentLocation = savedInstanceState.getParcelable(KEY_LOCATION);
+            }
+
+            // Update the value of mLastUpdateTime.
+            if (savedInstanceState.keySet().contains(KEY_LAST_UPDATED_TIME)) {
+                mLastUpdateTime = savedInstanceState.getString(KEY_LAST_UPDATED_TIME);
+            }
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mRequestingLocationUpdates  && checkLocationPermission()) {
+            startLocationUpdates();
+        } else if (!checkLocationPermission()) {
+            requestLocationPermission();
+        }
+//        TODO: Retrieve shared preferences.
+    }
+
+    /**
+     * Requests location updates from the FuseLocationClientApi. This request is only performed
+     * when runtime location permission has been granted in devices running android M and above.
+     */
+    @SuppressWarnings("MissingPermission")
+    private void startLocationUpdates() {
+
+        // Check if the device has the necessary location settings.
+        mSettingsClient.checkLocationSettings(mLocationSettingsRequest)
+                .addOnSuccessListener(this, new OnSuccessListener<LocationSettingsResponse>() {
+                    @Override
+                    public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
+
+                        //noinspection MissingPermission
+                        mFusedLocationClient.requestLocationUpdates(mLocationRequest,
+                                mLocationCallback, Looper.myLooper());
+                    }
+                })
+                .addOnFailureListener(this, new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+
+                        final int statusCode = ((ApiException) e).getStatusCode();
+                        switch (statusCode) {
+                            case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
+                                // Location settings are not satisfied.
+                                try {
+                                    // Show dialog
+                                    ResolvableApiException rae = (ResolvableApiException) e;
+                                    rae.startResolutionForResult(MapsActivity.this,
+                                            REQUEST_CODE_CHECK_SETTINGS);
+                                } catch (IntentSender.SendIntentException sendEx) {
+                                    // pendingIntent unable to execute request.
+                                }
+                                break;
+                            case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
+                                final String errorMessage = "Location settings are inadequate " +
+                                        "and cannot be fixed here. Fix in settings.";
+                                Toast.makeText(MapsActivity.this, errorMessage,
+                                        Toast.LENGTH_LONG).show();
+                                mRequestingLocationUpdates = false;
+                        }
+                        updateUI();
+                    }
+                });
+    }
+
+    /**
+     * Updates UI fields.
+     */
+    private void updateUI() {
+//        setButtonsEnabledState();
+        updateLocation();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        // Remove location updates to save battery.
+        stopLocationUpdates();
+//        TODO: Set shared preferences.
+    }
+
+    /**
+     * Removes location updates from the FusedLocationApi
+     */
+    private void stopLocationUpdates() {
+        if (!mRequestingLocationUpdates) {
+            // Updates were never requested.
+            return;
+        }
+
+        // Remove location request when activity is in a paused or stopped state.
+        mFusedLocationClient.removeLocationUpdates(mLocationCallback)
+                .addOnCompleteListener(this, new OnCompleteListener<Void>() {
+                    @Override
+                    public void onComplete(@NonNull Task<Void> task) {
+                        mRequestingLocationUpdates = false;
+//                        setButtonsEnabledState();
+                    }
+                });
+    }
+
+    /**
+     * Saves activity data in Bundle.
+     *
+     * @param outState bundle to store activity.
+     */
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean(KEY_REQUESTING_LOCATION_UPDATES, mRequestingLocationUpdates);
+        outState.putString(KEY_LAST_UPDATED_TIME, mLastUpdateTime);
+        outState.putParcelable(KEY_LOCATION, mCurrentLocation);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        switch (requestCode) {
+            // Check for integer request code originally supplied to startResolutionForResult().
+            case REQUEST_CODE_CHECK_SETTINGS:
+                switch (resultCode) {
+                    case Activity.RESULT_OK:
+                        // Do nothing. startLocationUpdates() gets called in onResume again.
+                        break;
+                    case Activity.RESULT_CANCELED:
+                        // User chose not to make required location changes.
+                        mRequestingLocationUpdates = false;
+                        updateUI();
+                        break;
+                }
+                break;
+        }
+    }
+
+    /**
+     * Handles the start updates button and requests starts of location updates.
+     */
+    public void startsUpdatesButtonHandler() {
+        if (!mRequestingLocationUpdates) {
+            mRequestingLocationUpdates = true;
+//            setButtonsEnabledState();
+            startLocationUpdates();
+        }
+    }
+
+    /**
+     * Handles the stop updates button and requests removal of location updates.
+     */
+    public void stopUpdateButtonHandler() {
+        stopLocationUpdates();
     }
 
     /**
      * Zooms-in on current user location with some animation.
      *
-     * @param location provided user location.
+     * @param latLng provided user {@link LatLng}.
      */
-    private void updateLocationAnimate(Location location) {
-        if (location != null) {
-            final LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+    private void updateLocationAnimate(LatLng latLng) {
             final MarkerOptions markerOptions = new MarkerOptions();
             markerOptions.position(latLng);
 
+        if (mMap != null) {
             final int zoom = 13;
             mMarker = mMap.addMarker(markerOptions);
             mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
@@ -158,62 +424,96 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     /**
-     * Updates user location with provided location information as frequently as possible.
-     *
-     * @param location provided user location.
+     * Updates user location with provided location information.
      */
-    private void updateLocation(Location location) {
-        if (location != null) {
-            final LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
-            mMarker.setPosition(latLng);
+    private void updateLocation() {
+        if (mCurrentLocation != null) {
+            final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
+                    mCurrentLocation.getLongitude());
+//            updateLocationAnimate(latLng);
+//            mMarker.setPosition(latLng);
+            Toast.makeText(this, latLng.toString(), Toast.LENGTH_SHORT).show();
+            if (mMarker == null) {
+                updateLocationAnimate(latLng);
+            } else mMarker.setPosition(latLng);
         }
     }
 
     /**
-     * Checks for location permission on devices running Android M or greater and request for
-     * permission when not already granted.
+     * Checks the current state of location permissions needed.
      *
-     * @return the permission status. If false, it initiates the permission request process.
+     * @return the permission status.
      */
     private boolean checkLocationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
 
-            if (ActivityCompat.checkSelfPermission(this,
-                    Manifest.permission.ACCESS_FINE_LOCATION) !=
-                    PackageManager.PERMISSION_GRANTED) {
-
-                if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                        Manifest.permission.ACCESS_FINE_LOCATION)) {
-                    showRationaleDialog();
-                } else {
-                    requestLocationPermission();
-                }
-                return false;
-            }
-        }
-        return true;
+            final int permissionState = ActivityCompat.checkSelfPermission(this,
+                    Manifest.permission.ACCESS_FINE_LOCATION);
+            return permissionState == PackageManager.PERMISSION_GRANTED;
     }
 
     /**
-     * Does the actual permission request.
+     * Request location permission from the user and show the request rationale where necessary.
      */
     private void requestLocationPermission() {
+
+        // Provide rationale to the user. This would happens when the user denies a
+        // previous request.
+        if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                Manifest.permission.ACCESS_FINE_LOCATION)) {
+            showRationaleDialog();
+        } else {
+            // Request permission.
+            performLocationPermissionRequest();
+        }
+    }
+
+    /**
+     * Does the actual location permission request.
+     */
+    private void performLocationPermissionRequest() {
         ActivityCompat.requestPermissions(this,
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
                 REQUEST_CODE_LOCATION);
     }
 
+    /**
+     * Callback received when the permissions request has completed.
+     *
+     * @param requestCode request code
+     * @param permissions permissions
+     * @param grantResults the granted results array.
+     */
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
         switch (requestCode) {
             case REQUEST_CODE_LOCATION: {
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    initialiseMap();
+                if (grantResults.length <= 0) {
+                    Toast.makeText(this, "Cancelled", Toast.LENGTH_SHORT).show();
+                    // User interaction was interrupted, the permission request was cancelled.
+                } else if  (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Permission granted.
+                    if (mRequestingLocationUpdates) {
+                        startLocationUpdates();
+                    }
                 } else {
-//                    TODO: Disable modules depending on this permission
+                    // Permission denied. Notify user that they have rejected a core permission
+                    // for the app.
+                    Snackbar.make(findViewById(android.R.id.content),
+                            R.string.permission_denied_explanation, Snackbar.LENGTH_INDEFINITE)
+                            .setAction(R.string.settings, new View.OnClickListener() {
+                                @Override
+                                public void onClick(View view) {
+                                    Intent intent = new Intent();
+                                    intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                    Uri uri = Uri.fromParts("package",
+                                            BuildConfig.APPLICATION_ID, null);
+                                    intent.setData(uri);
+                                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    startActivity(intent);
+                                }
+                            }).show();
                 }
             }
         }
@@ -240,7 +540,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     .setPositiveButton(R.string.alert_dialog_ok,
                             new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog, int whichButton) {
-                                    ((MapsActivity) getActivity()).doPositiveClick();
+                                    ((MapsActivity) getActivity()).dialogPositiveButtonHandler();
                                 }
                             }
                     )
@@ -261,7 +561,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      * Handles user closing the dialog from {@link #showRationaleDialog()} by requesting
      * for the location once more.
      */
-    private void doPositiveClick() {
-        requestLocationPermission();
+    private void dialogPositiveButtonHandler() {
+        performLocationPermissionRequest();
     }
 }
