@@ -85,8 +85,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private static final int REQUEST_CODE_LOCATION = 1;
 
     /**
-     * Code used in checking settings
-     * TODO: update this comment.
+     * Code used in checking if location settings are satisfied.
      */
     private static final int REQUEST_CODE_CHECK_SETTINGS = 10;
 
@@ -113,6 +112,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      * Represents the Google map object.
      */
     private GoogleMap mMap;
+
+    /**
+     * Map marker.
+     */
     private Marker mMarker = null;
 
     /**
@@ -140,12 +143,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      * Keeps track of the location update request. Allows the user to start and stop
      * the location tracking process.
      */
-    private boolean mRequestingLocationUpdates = true;
+    private boolean mRequestingLocationUpdates;
 
     /**
      * Time when location was last updated represented as a string.
      */
-    private String mLastUpdateTime = "";
+    private String mLastUpdateTime;
 
     /**
      * Callback for the location events.
@@ -168,6 +171,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         // Updates values from previous instance of the activity.
         updateValuesFromBundle(savedInstanceState);
+
+        mRequestingLocationUpdates = true;
+        mLastUpdateTime = "";
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         mSettingsClient = LocationServices.getSettingsClient(this);
@@ -228,6 +234,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
+        mMap.getUiSettings().setMyLocationButtonEnabled(false);
+
+        if (checkLocationPermission()) mMap.setMyLocationEnabled(true);
     }
 
     /**
@@ -256,12 +265,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        if (!checkLocationPermission()) {
+            requestLocationPermission();
+        }
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
-        if (mRequestingLocationUpdates  && checkLocationPermission()) {
+        if (checkLocationPermission()) {
             startLocationUpdates();
-        } else if (!checkLocationPermission()) {
-            requestLocationPermission();
         }
 //        TODO: Retrieve shared preferences.
     }
@@ -282,6 +297,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         //noinspection MissingPermission
                         mFusedLocationClient.requestLocationUpdates(mLocationRequest,
                                 mLocationCallback, Looper.myLooper());
+                        mRequestingLocationUpdates = true;
                     }
                 })
                 .addOnFailureListener(this, new OnFailureListener() {
@@ -370,7 +386,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             case REQUEST_CODE_CHECK_SETTINGS:
                 switch (resultCode) {
                     case Activity.RESULT_OK:
-                        // Do nothing. startLocationUpdates() gets called in onResume again.
+                        startLocationUpdates();
                         break;
                     case Activity.RESULT_CANCELED:
                         // User chose not to make required location changes.
@@ -430,8 +446,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (mCurrentLocation != null) {
             final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
                     mCurrentLocation.getLongitude());
-//            updateLocationAnimate(latLng);
-//            mMarker.setPosition(latLng);
             Toast.makeText(this, latLng.toString(), Toast.LENGTH_SHORT).show();
             if (mMarker == null) {
                 updateLocationAnimate(latLng);
