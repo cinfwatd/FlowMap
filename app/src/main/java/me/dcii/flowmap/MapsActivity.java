@@ -236,7 +236,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mMap = googleMap;
         mMap.getUiSettings().setMyLocationButtonEnabled(false);
 
-        if (checkLocationPermission()) mMap.setMyLocationEnabled(true);
+//        if (checkLocationPermission()) mMap.setMyLocationEnabled(true);
     }
 
     /**
@@ -399,24 +399,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     /**
-     * Handles the start updates button and requests starts of location updates.
-     */
-    public void startsUpdatesButtonHandler() {
-        if (!mRequestingLocationUpdates) {
-            mRequestingLocationUpdates = true;
-//            setButtonsEnabledState();
-            startLocationUpdates();
-        }
-    }
-
-    /**
-     * Handles the stop updates button and requests removal of location updates.
-     */
-    public void stopUpdateButtonHandler() {
-        stopLocationUpdates();
-    }
-
-    /**
      * Zooms-in on current user location with some animation.
      *
      * @param latLng provided user {@link LatLng}.
@@ -508,9 +490,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     // User interaction was interrupted, the permission request was cancelled.
                 } else if  (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
-                    if (mRequestingLocationUpdates) {
                         startLocationUpdates();
-                    }
                 } else {
                     // Permission denied. Notify user that they have rejected a core permission
                     // for the app.
