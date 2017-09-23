@@ -65,6 +65,7 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
@@ -481,21 +482,25 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * @param latLng provided user {@link LatLng}.
      */
     private void updateLocationAnimate(LatLng latLng) {
-            final MarkerOptions markerOptions = new MarkerOptions();
-            markerOptions.position(latLng);
+        // Stop execution if mMap is null.
+        if (mMap == null) return;
 
-        if (mMap != null) {
-            final int zoom = 13;
-            mMarker = mMap.addMarker(markerOptions);
-            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
-            final CameraPosition cameraPosition = new CameraPosition.Builder()
-                    .target(latLng)
-                    .zoom(17)
-                    .bearing(90)
-                    .tilt(40)
-                    .build();
-            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
-        }
+        final MarkerOptions markerOptions = new MarkerOptions();
+        markerOptions.position(latLng);
+
+        // Set marker start location color to orange to signify start location.
+        markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
+        final int zoom = 13;
+        mMarker = mMap.addMarker(markerOptions);
+        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
+        final CameraPosition cameraPosition = new CameraPosition.Builder()
+                .target(latLng)
+                .zoom(17)
+                .bearing(90)
+                .tilt(40)
+                .build();
+        mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
+
     }
 
     /**
@@ -507,6 +512,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     mCurrentLocation.getLongitude());
             Toast.makeText(this, latLng.toString(), Toast.LENGTH_SHORT).show();
             if (mMarker == null) {
+                // Marker is null on first start. Hence animate and zoom-in on user's location.
                 updateLocationAnimate(latLng);
             } else mMarker.setPosition(latLng);
         }
