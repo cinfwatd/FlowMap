@@ -186,11 +186,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mFab = findViewById(R.id.fab);
         mFab.setOnClickListener(this);
 
-        // Updates values from previous instance of the activity.
-        updateValuesFromBundle(savedInstanceState);
-
         mRequestingLocationUpdates = false;
         mLastUpdateTime = "";
+
+        // Updates values from previous instance of the activity.
+        updateValuesFromBundle(savedInstanceState);
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         mSettingsClient = LocationServices.getSettingsClient(this);
@@ -289,7 +289,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 mLastUpdateTime = savedInstanceState.getString(KEY_LAST_UPDATED_TIME);
             }
         }
-        updateUI();
     }
 
     @Override
@@ -306,6 +305,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (mRequestingLocationUpdates && checkLocationPermission()) {
             startLocationUpdates();
         }
+        updateUI();
 //        TODO: Retrieve shared preferences.
     }
 
@@ -588,7 +588,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onClick(View view) {
-        Toast.makeText(this, "yessss" + mRequestingLocationUpdates, Toast.LENGTH_SHORT).show();
         if (mRequestingLocationUpdates) {
             // Requesting updates at the moment. Hence the request is to stop requiring updates.
             stopLocationUpdates();
