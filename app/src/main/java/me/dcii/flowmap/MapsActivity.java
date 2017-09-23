@@ -303,7 +303,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     protected void onResume() {
         super.onResume();
         if (mRequestingLocationUpdates && checkLocationPermission()) {
-            startLocationUpdates();
+            startLocationUpdates(false);
         }
         updateUI();
 //        TODO: Retrieve shared preferences.
@@ -312,9 +312,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     /**
      * Requests location updates from the FuseLocationClientApi. This request is only performed
      * when runtime location permission has been granted in devices running android M and above.
+     * Also, the user is notified if enabled.
+     *
+     * @param notify flag used to decide on notifying the user of the location request status.
      */
     @SuppressWarnings("MissingPermission")
-    private void startLocationUpdates() {
+    private void startLocationUpdates(final boolean notify) {
 
         // Check if the device has the necessary location settings.
         mSettingsClient.checkLocationSettings(mLocationSettingsRequest)
@@ -322,8 +325,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     @Override
                     public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
 
-                        setRequestingLocationUpdates(true,
-                                R.string.requesting_location_updates_start);
+                        if (notify) {
+                            setRequestingLocationUpdates(true,
+                                    R.string.requesting_location_updates_start);
+                        } else {
+                            setRequestingLocationUpdates(true);
+                        }
                         //noinspection MissingPermission
                         mFusedLocationClient.requestLocationUpdates(mLocationRequest,
                                 mLocationCallback, Looper.myLooper());
@@ -391,7 +398,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 .addOnCompleteListener(this, new OnCompleteListener<Void>() {
                     @Override
                     public void onComplete(@NonNull Task<Void> task) {
-                        Toast.makeText(MapsActivity.this, "yes complete " + mRequestingLocationUpdates, Toast.LENGTH_SHORT ).show();
                         setRequestingLocationUpdates(false,
                                 R.string.requesting_location_updates_stop);
                         updateUI();
@@ -437,7 +443,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             case REQUEST_CODE_CHECK_SETTINGS:
                 switch (resultCode) {
                     case Activity.RESULT_OK:
-                        startLocationUpdates();
+                        startLocationUpdates(true);
                         break;
                     case Activity.RESULT_CANCELED:
                         // User chose not to make required location changes.
@@ -562,7 +568,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 } else if  (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
                     if (mRequestingLocationUpdates) {
-                        startLocationUpdates();
+                        startLocationUpdates(true);
                     }
                 } else {
                     // Permission denied. Notify user that they have rejected a core permission
@@ -593,7 +599,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             stopLocationUpdates();
         } else {
             // Not requesting updates at the moment. Hence the request is to start requiring updates.
-            startLocationUpdates();
+            startLocationUpdates(true);
         }
     }
 
