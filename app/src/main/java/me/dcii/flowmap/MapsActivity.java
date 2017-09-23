@@ -282,10 +282,21 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
         mMap.getUiSettings().setMyLocationButtonEnabled(false);
+        mMap.setLocationSource(this);
+        setMyLocationEnabled(true);
+    }
 
-        if (checkLocationPermission()) {
-            mMap.setMyLocationEnabled(true);
-            mMap.setLocationSource(this);
+    /**
+     * Sets {@link GoogleMap#setMyLocationEnabled(boolean)}.
+     *
+     * @param myLocationEnabled boolean location enabled flag.
+     */
+    private void setMyLocationEnabled(boolean myLocationEnabled) {
+        try {
+            mMap.setMyLocationEnabled(myLocationEnabled);
+        } catch (SecurityException ex) {
+            // Initiate location permission request.
+            requestLocationPermission();
         }
     }
 
@@ -348,9 +359,13 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     @Override
                     public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
 
+                        // if notify false, device is rotated.
                         if (notify) {
                             setRequestingLocationUpdates(true,
                                     R.string.requesting_location_updates_start);
+
+                            // Clears map markings.
+                            reInitialiseMap();
                         } else {
                             setRequestingLocationUpdates(true);
                         }
@@ -549,7 +564,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     /**
-     * Adds the end location marker to the map.
+     * Adds the end location marker to the map and removes the current user location marker.
      *
      * @param latLng the end location {@link LatLng}.
      */
@@ -564,6 +579,27 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Set marker end location color to red.
         markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED));
         mEndMarker = mMap.addMarker(markerOptions);
+
+        // remove current user location.
+        setMyLocationEnabled(false);
+    }
+
+    /**
+     * Clears map markings and enable {@link GoogleMap#setMyLocationEnabled(boolean)}.
+     */
+    private void reInitialiseMap() {
+        // Stop execution if mMap is mull.
+        if (mMap == null) return;
+
+            if (mStartMarker != null) {
+                mStartMarker.remove();
+                mStartMarker = null;
+            }
+            if (mEndMarker != null) {
+                mEndMarker.remove();
+                mEndMarker = null;
+            }
+            setMyLocationEnabled(true);
     }
 
     /**
