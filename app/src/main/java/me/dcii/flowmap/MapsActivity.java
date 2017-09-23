@@ -63,6 +63,7 @@ import com.google.android.gms.location.LocationSettingsStatusCodes;
 import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.LocationSource;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
@@ -79,12 +80,15 @@ import java.text.DateFormat;
 import java.util.Date;
 
 /**
- * Presents the map to the user.
+ * Presents the map to the user. Implements {@link OnMapReadyCallback} interface for when
+ * the map is ready to be used; {@link LocationSource} interface to provide location updates using
+ * the {@link GoogleMap#setMyLocationEnabled(boolean)} option; and
+ * {@link android.view.View.OnClickListener} to handle the {@link FloatingActionButton} clicks.
  *
  * @author Dogak Cinfwat.
  */
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,
-        View.OnClickListener {
+        LocationSource, View.OnClickListener {
 
     /**
      * Code used in requesting runtime location permission.
@@ -147,6 +151,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private LocationSettingsRequest mLocationSettingsRequest;
 
     /**
+     * Provides the location change listener used for the location source interface.
+     */
+    private OnLocationChangedListener mLocationChangeListener;
+
+    /**
      * Stores parameters for request to the FusedLocationProviderApi.
      */
     private LocationRequest mLocationRequest;
@@ -195,6 +204,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         mSettingsClient = LocationServices.getSettingsClient(this);
+        mLocationChangeListener = null;
 
         // Kick of the process of building the LocationCallback, LocationRequest, and
         // LocationSettingsRequest objects.
@@ -224,6 +234,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
                 mCurrentLocation = locationResult.getLastLocation();
                 mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
+
+                if (mLocationChangeListener != null) {
+                    mLocationChangeListener.onLocationChanged(mCurrentLocation);
+                }
                 updateLocation();
             }
         };
@@ -264,7 +278,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mMap = googleMap;
         mMap.getUiSettings().setMyLocationButtonEnabled(false);
 
-//        if (checkLocationPermission()) mMap.setMyLocationEnabled(true);
+        if (checkLocationPermission()) {
+            mMap.setMyLocationEnabled(true);
+            mMap.setLocationSource(this);
+        }
     }
 
     /**
@@ -399,6 +416,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 .addOnCompleteListener(this, new OnCompleteListener<Void>() {
                     @Override
                     public void onComplete(@NonNull Task<Void> task) {
+
+                        // Show end location marker.
+                        final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
+                                mCurrentLocation.getLongitude());
                         setRequestingLocationUpdates(false,
                                 R.string.requesting_location_updates_stop);
                         updateUI();
@@ -477,7 +498,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     /**
-     * Zooms-in on current user location with some animation.
+     * Zooms-in on current user location with some animation. Also, adds the start location marker.
      *
      * @param latLng provided user {@link LatLng}.
      */
@@ -485,13 +506,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Stop execution if mMap is null.
         if (mMap == null) return;
 
+        final int zoom = 13;
         final MarkerOptions markerOptions = new MarkerOptions();
         markerOptions.position(latLng);
 
-        // Set marker start location color to orange to signify start location.
+        // Set marker start location color to green.
         markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
-        final int zoom = 13;
+        markerOptions.title(getString(R.string.start_location));
         mMarker = mMap.addMarker(markerOptions);
+
         mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
         final CameraPosition cameraPosition = new CameraPosition.Builder()
                 .target(latLng)
@@ -500,7 +523,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 .tilt(40)
                 .build();
         mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
-
     }
 
     /**
@@ -514,7 +536,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             if (mMarker == null) {
                 // Marker is null on first start. Hence animate and zoom-in on user's location.
                 updateLocationAnimate(latLng);
-            } else mMarker.setPosition(latLng);
+            } else {
+                // TODO: draw user movement.
+            }
         }
     }
 
@@ -607,6 +631,16 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             // Not requesting updates at the moment. Hence the request is to start requiring updates.
             startLocationUpdates(true);
         }
+    }
+
+    @Override
+    public void activate(OnLocationChangedListener onLocationChangedListener) {
+        mLocationChangeListener = onLocationChangedListener;
+    }
+
+    @Override
+    public void deactivate() {
+        mLocationChangeListener = null;
     }
 
     /**
