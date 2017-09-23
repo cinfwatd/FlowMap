@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="me.dcii.flowmap">
+
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Needed if app targets API level 21 (Android 5.0) or higher. -->
     <uses-feature android:name="android.hardware.location.gps" />
-    
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -18,7 +19,8 @@
 
         <activity
             android:name=".MapsActivity"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:theme="@style/AppTheme.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

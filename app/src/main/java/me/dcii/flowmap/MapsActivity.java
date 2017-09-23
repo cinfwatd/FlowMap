@@ -31,17 +31,22 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
+import android.graphics.PorterDuff;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Looper;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
+import android.support.annotation.StringRes;
+import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.DialogFragment;
-import android.support.v4.app.FragmentActivity;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
 import android.view.View;
 import android.widget.Toast;
 
@@ -77,7 +82,8 @@ import java.util.Date;
  *
  * @author Dogak Cinfwat.
  */
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
+public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,
+        View.OnClickListener {
 
     /**
      * Code used in requesting runtime location permission.
@@ -112,6 +118,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      * Represents the Google map object.
      */
     private GoogleMap mMap;
+
+    /**
+     * Floating action button.
+     */
+    private FloatingActionButton mFab;
 
     /**
      * Map marker.
@@ -165,14 +176,20 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
-        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
+        final SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+
+        final Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+
+        mFab = findViewById(R.id.fab);
+        mFab.setOnClickListener(this);
 
         // Updates values from previous instance of the activity.
         updateValuesFromBundle(savedInstanceState);
 
-        mRequestingLocationUpdates = true;
+        mRequestingLocationUpdates = false;
         mLastUpdateTime = "";
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
@@ -183,6 +200,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         createLocationCallback();
         createLocationRequest();
         buildLocationSettingsRequest();
+    }
+
+    /**
+     * Sets the tint color of the {@link FloatingActionButton} to white.
+     *
+     * @param colorRes Color resource id.
+     */
+    private void setFabTintColor(int colorRes) {
+        mFab.getDrawable().setColorFilter(
+                ContextCompat.getColor(this, colorRes), PorterDuff.Mode.SRC_IN);
     }
 
     /**
@@ -262,6 +289,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 mLastUpdateTime = savedInstanceState.getString(KEY_LAST_UPDATED_TIME);
             }
         }
+        updateUI();
     }
 
     @Override
@@ -275,7 +303,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     protected void onResume() {
         super.onResume();
-        if (checkLocationPermission()) {
+        if (mRequestingLocationUpdates && checkLocationPermission()) {
             startLocationUpdates();
         }
 //        TODO: Retrieve shared preferences.
@@ -294,16 +322,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     @Override
                     public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
 
+                        setRequestingLocationUpdates(true,
+                                R.string.requesting_location_updates_start);
                         //noinspection MissingPermission
                         mFusedLocationClient.requestLocationUpdates(mLocationRequest,
                                 mLocationCallback, Looper.myLooper());
-                        mRequestingLocationUpdates = true;
                     }
                 })
                 .addOnFailureListener(this, new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-
                         final int statusCode = ((ApiException) e).getStatusCode();
                         switch (statusCode) {
                             case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
@@ -318,12 +346,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                 }
                                 break;
                             case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
-                                final String errorMessage = "Location settings are inadequate " +
-                                        "and cannot be fixed here. Fix in settings.";
-                                Toast.makeText(MapsActivity.this, errorMessage,
-                                        Toast.LENGTH_LONG).show();
-                                mRequestingLocationUpdates = false;
+                                setRequestingLocationUpdates(false,
+                                        R.string.error_inadequate_location_settings);
                         }
+                    }
+                })
+                .addOnCompleteListener(this,
+                        new OnCompleteListener<LocationSettingsResponse>() {
+                    @Override
+                    public void onComplete(@NonNull Task<LocationSettingsResponse> task) {
                         updateUI();
                     }
                 });
@@ -333,7 +364,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      * Updates UI fields.
      */
     private void updateUI() {
-//        setButtonsEnabledState();
+        setFabEnabledState();
         updateLocation();
     }
 
@@ -360,10 +391,30 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 .addOnCompleteListener(this, new OnCompleteListener<Void>() {
                     @Override
                     public void onComplete(@NonNull Task<Void> task) {
-                        mRequestingLocationUpdates = false;
-//                        setButtonsEnabledState();
+                        Toast.makeText(MapsActivity.this, "yes complete " + mRequestingLocationUpdates, Toast.LENGTH_SHORT ).show();
+                        setRequestingLocationUpdates(false,
+                                R.string.requesting_location_updates_stop);
+                        updateUI();
                     }
                 });
+    }
+
+    /**
+     * Sets {@link FloatingActionButton} drawable image to represent available action.
+     * The {@link FloatingActionButton} can be used to request update and stop requesting.
+     */
+    private void setFabEnabledState() {
+        if (mRequestingLocationUpdates) {
+            // Requesting location updates; show the disable location updates icon.
+            mFab.setImageDrawable(ContextCompat.getDrawable(
+                    MapsActivity.this, R.drawable.ic_location_off_black_24dp));
+        } else {
+            // Not requesting location updates; show enable location updates icon.
+            mFab.setImageDrawable(ContextCompat.getDrawable(
+                    MapsActivity.this, R.drawable.ic_location_on_black_24dp));
+        }
+        // Set icon tint color to white.
+        setFabTintColor(android.R.color.white);
     }
 
     /**
@@ -396,6 +447,26 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 }
                 break;
         }
+    }
+
+    /**
+     * Sets {@link #mRequestingLocationUpdates} status from the provided value.
+     *
+     * @param requestingUpdates current request status.
+     */
+    private void setRequestingLocationUpdates(boolean requestingUpdates) {
+        mRequestingLocationUpdates = requestingUpdates;
+    }
+
+    /**
+     * Sets {@link #mRequestingLocationUpdates} status and informs the user of the change.
+     *
+     * @param requestingUpdates current request status.
+     * @param messageRes the user message resource Id.
+     */
+    private void setRequestingLocationUpdates(boolean requestingUpdates, @StringRes int messageRes) {
+        setRequestingLocationUpdates(requestingUpdates);
+        Toast.makeText(this, messageRes, Toast.LENGTH_SHORT).show();
     }
 
     /**
@@ -490,7 +561,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     // User interaction was interrupted, the permission request was cancelled.
                 } else if  (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
+                    if (mRequestingLocationUpdates) {
                         startLocationUpdates();
+                    }
                 } else {
                     // Permission denied. Notify user that they have rejected a core permission
                     // for the app.
@@ -510,6 +583,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             }).show();
                 }
             }
+        }
+    }
+
+    @Override
+    public void onClick(View view) {
+        Toast.makeText(this, "yessss" + mRequestingLocationUpdates, Toast.LENGTH_SHORT).show();
+        if (mRequestingLocationUpdates) {
+            // Requesting updates at the moment. Hence the request is to stop requiring updates.
+            stopLocationUpdates();
+        } else {
+            // Not requesting updates at the moment. Hence the request is to start requiring updates.
+            startLocationUpdates();
         }
     }
 
