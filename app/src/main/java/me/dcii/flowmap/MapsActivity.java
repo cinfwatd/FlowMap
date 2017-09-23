@@ -47,6 +47,7 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
@@ -106,6 +107,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting-location-update";
     private static final String KEY_LOCATION = "last-location";
     private static final String KEY_LAST_UPDATED_TIME = "last-updated-time";
+    private static final String KEY_START_MARKER_POSITION = "start-marker-position";
+    private static final String KEY_END_MARKER_POSITION = "end-marker-position";
 
     /**
      * The desired interval for location updates (milliseconds). Updates maybe more or less
@@ -135,9 +138,19 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private Marker mStartMarker = null;
 
     /**
+     * Map marker {@link LatLng} position. Used to rebuild start marker on configuration change.
+     */
+    private LatLng mStartMarkerPosition = null;
+
+    /**
      * Map marker for journey end location.
      */
     private Marker mEndMarker = null;
+
+    /**
+     * Map marker {@link LatLng} position. Used to rebuild end marker on configuration change.
+     */
+    private LatLng mEndMarkerPosition = null;
 
     /**
      * Provides access to the fused location provider API
@@ -283,7 +296,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mMap = googleMap;
         mMap.getUiSettings().setMyLocationButtonEnabled(false);
         mMap.setLocationSource(this);
-        setMyLocationEnabled(true);
+        setMyLocationEnabled(mRequestingLocationUpdates);
+        updateUI();
     }
 
     /**
@@ -322,6 +336,16 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             if (savedInstanceState.keySet().contains(KEY_LAST_UPDATED_TIME)) {
                 mLastUpdateTime = savedInstanceState.getString(KEY_LAST_UPDATED_TIME);
             }
+
+            // Update the value start marker.
+            if (savedInstanceState.keySet().contains(KEY_START_MARKER_POSITION)) {
+                mStartMarkerPosition = savedInstanceState.getParcelable(KEY_START_MARKER_POSITION);
+            }
+
+            // Update the value end marker.
+            if (savedInstanceState.keySet().contains(KEY_END_MARKER_POSITION)) {
+                mEndMarkerPosition = savedInstanceState.getParcelable(KEY_END_MARKER_POSITION);
+            }
         }
     }
 
@@ -339,7 +363,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (mRequestingLocationUpdates && checkLocationPermission()) {
             startLocationUpdates(false);
         }
-        updateUI();
 //        TODO: Retrieve shared preferences.
     }
 
@@ -410,6 +433,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     private void updateUI() {
         setFabEnabledState();
+        updateMarkers();
         updateLocation();
     }
 
@@ -440,9 +464,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                         // Show end location marker.
                         final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
                                 mCurrentLocation.getLongitude());
-                        addLocationEndMarker(latLng);
                         setRequestingLocationUpdates(false,
                                 R.string.requesting_location_updates_stop);
+                        addLocationEndMarker(latLng);
                         updateUI();
                     }
                 });
@@ -476,6 +500,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         outState.putBoolean(KEY_REQUESTING_LOCATION_UPDATES, mRequestingLocationUpdates);
         outState.putString(KEY_LAST_UPDATED_TIME, mLastUpdateTime);
         outState.putParcelable(KEY_LOCATION, mCurrentLocation);
+        outState.putParcelable(KEY_START_MARKER_POSITION, mStartMarkerPosition);
+        outState.putParcelable(KEY_END_MARKER_POSITION, mEndMarkerPosition);
         super.onSaveInstanceState(outState);
     }
 
@@ -527,16 +553,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Stop execution if mMap is null.
         if (mMap == null) return;
 
-        final int zoom = 13;
-        final MarkerOptions markerOptions = new MarkerOptions();
-        markerOptions.position(latLng);
+        // add location start marker.
+        addLocationStartMarker(latLng);
 
-        // Set marker start location color to green.
-        markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
-        markerOptions.title(getString(R.string.start_location));
-        mStartMarker = mMap.addMarker(markerOptions);
-
-        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
+        // animate and zoom-in to provided LatLng position.
+        mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng));
         final CameraPosition cameraPosition = new CameraPosition.Builder()
                 .target(latLng)
                 .zoom(17)
@@ -550,7 +571,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * Updates user location with provided location information.
      */
     private void updateLocation() {
-        if (mCurrentLocation != null) {
+        if (mCurrentLocation != null && mRequestingLocationUpdates) {
             final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
                     mCurrentLocation.getLongitude());
             Toast.makeText(this, latLng.toString(), Toast.LENGTH_SHORT).show();
@@ -560,7 +581,45 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             } else {
                 // TODO: draw user movement.
             }
+        } else if (!mRequestingLocationUpdates && mMap != null) {
+            // remove current user location.
+            setMyLocationEnabled(false);
         }
+    }
+
+    /**
+     * Adds location markers to map provided the respective marker position is not null.
+     * This is used during device rotations to restore marker position.
+     */
+    private void updateMarkers() {
+        if (mStartMarkerPosition != null) {
+            addLocationStartMarker(mStartMarkerPosition);
+        }
+        if (mEndMarkerPosition != null) {
+            addLocationEndMarker(mEndMarkerPosition);
+        }
+    }
+
+    /**
+     * Adds the start location marker to the map.
+     *
+     * @param latLng the start location {@link LatLng}.
+     */
+    private void addLocationStartMarker(LatLng latLng) {
+        // Stop execution if mMap is null.
+        Log.d("Shout", "map:" + mMap);
+        if (mMap == null) return;
+
+        final MarkerOptions markerOptions = new MarkerOptions();
+        markerOptions.position(latLng);
+        markerOptions.title(getString(R.string.start_location));
+
+        // Set marker position. Used to reposition the marker on configuration change.
+        mStartMarkerPosition = latLng;
+
+        // Set marker end location color to red.
+        markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
+        mStartMarker = mMap.addMarker(markerOptions);
     }
 
     /**
@@ -576,12 +635,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         markerOptions.position(latLng);
         markerOptions.title(getString(R.string.end_location));
 
+        // Set marker position. Used to reposition the marker on configuration change.
+        mEndMarkerPosition = latLng;
+
         // Set marker end location color to red.
         markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED));
         mEndMarker = mMap.addMarker(markerOptions);
-
-        // remove current user location.
-        setMyLocationEnabled(false);
     }
 
     /**
@@ -591,15 +650,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Stop execution if mMap is mull.
         if (mMap == null) return;
 
-            if (mStartMarker != null) {
-                mStartMarker.remove();
-                mStartMarker = null;
-            }
-            if (mEndMarker != null) {
-                mEndMarker.remove();
-                mEndMarker = null;
-            }
-            setMyLocationEnabled(true);
+        mMap.clear();
+        if (mStartMarker != null) {
+            mStartMarker.remove();
+            mStartMarker = null;
+            mStartMarkerPosition = null;
+        }
+        if (mEndMarker != null) {
+            mEndMarker.remove();
+            mEndMarker = null;
+            mEndMarkerPosition = null;
+        }
+        setMyLocationEnabled(mRequestingLocationUpdates);
     }
 
     /**
