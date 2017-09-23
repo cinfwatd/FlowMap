@@ -130,9 +130,14 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private FloatingActionButton mFab;
 
     /**
-     * Map marker.
+     * Map marker for journey starting location.
      */
-    private Marker mMarker = null;
+    private Marker mStartMarker = null;
+
+    /**
+     * Map marker for journey end location.
+     */
+    private Marker mEndMarker = null;
 
     /**
      * Provides access to the fused location provider API
@@ -378,11 +383,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 })
                 .addOnCompleteListener(this,
                         new OnCompleteListener<LocationSettingsResponse>() {
-                    @Override
-                    public void onComplete(@NonNull Task<LocationSettingsResponse> task) {
-                        updateUI();
-                    }
-                });
+                            @Override
+                            public void onComplete(@NonNull Task<LocationSettingsResponse> task) {
+                                updateUI();
+                            }
+                        });
     }
 
     /**
@@ -420,6 +425,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                         // Show end location marker.
                         final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
                                 mCurrentLocation.getLongitude());
+                        addLocationEndMarker(latLng);
                         setRequestingLocationUpdates(false,
                                 R.string.requesting_location_updates_stop);
                         updateUI();
@@ -513,7 +519,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Set marker start location color to green.
         markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
         markerOptions.title(getString(R.string.start_location));
-        mMarker = mMap.addMarker(markerOptions);
+        mStartMarker = mMap.addMarker(markerOptions);
 
         mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
         final CameraPosition cameraPosition = new CameraPosition.Builder()
@@ -533,7 +539,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
                     mCurrentLocation.getLongitude());
             Toast.makeText(this, latLng.toString(), Toast.LENGTH_SHORT).show();
-            if (mMarker == null) {
+            if (mStartMarker == null) {
                 // Marker is null on first start. Hence animate and zoom-in on user's location.
                 updateLocationAnimate(latLng);
             } else {
@@ -543,15 +549,33 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     /**
+     * Adds the end location marker to the map.
+     *
+     * @param latLng the end location {@link LatLng}.
+     */
+    private void addLocationEndMarker(LatLng latLng) {
+        // Stop execution if mMap is null.
+        if (mMap == null) return;
+
+        final MarkerOptions markerOptions = new MarkerOptions();
+        markerOptions.position(latLng);
+        markerOptions.title(getString(R.string.end_location));
+
+        // Set marker end location color to red.
+        markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED));
+        mEndMarker = mMap.addMarker(markerOptions);
+    }
+
+    /**
      * Checks the current state of location permissions needed.
      *
      * @return the permission status.
      */
     private boolean checkLocationPermission() {
 
-            final int permissionState = ActivityCompat.checkSelfPermission(this,
-                    Manifest.permission.ACCESS_FINE_LOCATION);
-            return permissionState == PackageManager.PERMISSION_GRANTED;
+        final int permissionState = ActivityCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION);
+        return permissionState == PackageManager.PERMISSION_GRANTED;
     }
 
     /**

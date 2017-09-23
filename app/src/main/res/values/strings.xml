@@ -13,4 +13,6 @@
     <string name="requesting_location_updates_start">Requesting location updates.</string>
     <string name="requesting_location_updates_stop">Requesting location updates stopped.</string>
     <string name="error_inadequate_location_settings">Location settings are inadequate</string>
+    <string name="start_location">Start location</string>
+    <string name="end_location">End location</string>
 </resources>
