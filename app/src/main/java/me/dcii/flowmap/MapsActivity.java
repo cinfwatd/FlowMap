@@ -91,6 +91,13 @@ import java.util.Date;
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,
         LocationSource, View.OnClickListener {
 
+
+    /**
+     * Class name tag for debugging.
+     */
+    @SuppressWarnings("unused")
+    private final  static String TAG = MapsActivity.class.getSimpleName();
+
     /**
      * Code used in requesting runtime location permission.
      */
@@ -581,9 +588,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             } else {
                 // TODO: draw user movement.
             }
-        } else if (!mRequestingLocationUpdates && mMap != null) {
-            // remove current user location.
-            setMyLocationEnabled(false);
         }
     }
 
@@ -607,7 +611,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     private void addLocationStartMarker(LatLng latLng) {
         // Stop execution if mMap is null.
-        Log.d("Shout", "map:" + mMap);
         if (mMap == null) return;
 
         final MarkerOptions markerOptions = new MarkerOptions();
