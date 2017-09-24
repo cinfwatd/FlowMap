@@ -29,6 +29,9 @@ import android.support.test.rule.ActivityTestRule;
 import android.support.test.runner.AndroidJUnit4;
 import android.support.test.uiautomator.By;
 import android.support.test.uiautomator.UiDevice;
+import android.support.test.uiautomator.UiObject;
+import android.support.test.uiautomator.UiObjectNotFoundException;
+import android.support.test.uiautomator.UiSelector;
 import android.support.test.uiautomator.Until;
 
 import org.junit.After;
@@ -40,6 +43,7 @@ import org.junit.runner.RunWith;
 import static android.support.test.espresso.Espresso.onView;
 import static android.support.test.espresso.action.ViewActions.click;
 import static android.support.test.espresso.matcher.ViewMatchers.withContentDescription;
+import static android.support.test.espresso.matcher.ViewMatchers.withId;
 import static org.junit.Assert.*;
 
 /**
@@ -96,9 +100,36 @@ public class MapsActivityTest {
         onView(withContentDescription("Google Map")).perform(click());
     }
 
+    @Test
+    public void testRequestLocationUpdateStart() {
+        onView(withId(R.id.fab)).perform(click());
+
+        final UiObject startMarker = mDevice.findObject(new UiSelector()
+                .descriptionContains(mapsActivity.getString(R.string.start_location)));
+            try {
+                startMarker.click();
+            } catch (UiObjectNotFoundException e) {
+                e.printStackTrace();
+            }
+    }
+
+    public void testRequestLocationUpdateStop() {
+        // Second click request stop updates.
+        onView(withId(R.id.fab)).perform(click());
+
+        final UiObject endMarker = mDevice.findObject(new UiSelector()
+                .descriptionContains(mapsActivity.getString(R.string.end_location)));
+        try {
+            endMarker.click();
+        } catch (UiObjectNotFoundException e) {
+            e.printStackTrace();
+        }
+    }
+
     @After
     public void tearDown() throws Exception {
         mapsActivity = null;
+        mDevice = null;
     }
 
 }
