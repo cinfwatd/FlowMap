@@ -77,7 +77,7 @@ public class Location extends RealmObject {
         this.longitude = longitude;
     }
 
-    public Date getTime() {
+    public Date getTravelTime() {
         return time;
     }
 }

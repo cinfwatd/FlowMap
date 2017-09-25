@@ -24,15 +24,21 @@
 
 package me.dcii.flowmap.model;
 
+import android.content.Context;
+import android.content.res.Resources;
+
 import com.google.android.gms.maps.model.LatLng;
 
 import java.util.Date;
+import java.util.Locale;
 import java.util.UUID;
 
 import io.realm.Realm;
 import io.realm.RealmList;
 import io.realm.RealmObject;
+import io.realm.annotations.Ignore;
 import io.realm.annotations.PrimaryKey;
+import me.dcii.flowmap.R;
 
 /**
  * Represents the user Journey.
@@ -41,6 +47,18 @@ import io.realm.annotations.PrimaryKey;
  */
 
 public class Journey extends RealmObject {
+
+    @Ignore
+    private long mSecondsInMilliseconds = 1000;
+
+    @Ignore
+    private long mMinutesInMilliseconds = mSecondsInMilliseconds * 60;
+
+    @Ignore
+    private long mHoursInMilliseconds = mMinutesInMilliseconds * 60;
+
+    @Ignore
+    private long mDaysInMilliseconds = mHoursInMilliseconds * 24;
 
     @PrimaryKey
     private String id;  // Provide unique identifier.
@@ -144,6 +162,54 @@ public class Journey extends RealmObject {
 
     public void setDateDeleted(Date dateDeleted) {
         this.dateDeleted = dateDeleted;
+    }
+
+    /**
+     * Gets the total travel time from the first and last locations recorded in {@link #locations}.
+     *
+     * @param context context used to access application resources.
+     * @return
+     */
+    public String getTravelTime(Context context) {
+
+        final Location start = getStartLocation();
+        final Location end = getEndLocation();
+
+        // time in milliseconds.
+        long timeDifference = end.getTravelTime().getTime() - start.getTravelTime().getTime();
+
+        // Get days elapsed take that out from the total timeDifference.
+        final long daysElapsed = timeDifference / mDaysInMilliseconds;
+        timeDifference = timeDifference % mDaysInMilliseconds;
+
+        // Get hours elapsed since days elapsed and take that out from the timeDifference.
+        final long hoursElapsed = timeDifference / mHoursInMilliseconds;
+        timeDifference = timeDifference % mHoursInMilliseconds;
+
+        // Get minutes elapsed since hours elapsed and take that out from the timeDifference.
+        final long minutesElapsed = timeDifference / mMinutesInMilliseconds;
+        timeDifference = timeDifference % mMinutesInMilliseconds;
+
+        // Get seconds elapsed since minutes elapsed.
+        final long secondsElapsed = timeDifference / mSecondsInMilliseconds;
+
+        String timeString = "";
+        final Resources res = context.getResources();
+
+        // Stitch together the travel time string.
+        if (daysElapsed > 0) {
+            timeString = res.getQuantityString(R.plurals.days, (int) daysElapsed, daysElapsed);
+        }
+        if (hoursElapsed > 0) {
+            timeString += res.getQuantityString(R.plurals.hours, (int) hoursElapsed, hoursElapsed);
+        }
+        if (minutesElapsed > 0) {
+            timeString += res.getQuantityString(R.plurals.minutes, (int) minutesElapsed, minutesElapsed);
+        }
+        if (secondsElapsed > 0) {
+            timeString += res.getQuantityString(R.plurals.seconds, (int) secondsElapsed, secondsElapsed);
+        }
+        return timeString;
     }
 
     /**
