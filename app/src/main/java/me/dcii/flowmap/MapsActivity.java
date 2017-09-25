@@ -47,7 +47,6 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
@@ -79,6 +78,10 @@ import com.google.android.gms.tasks.Task;
 
 import java.text.DateFormat;
 import java.util.Date;
+import java.util.UUID;
+
+import io.realm.Realm;
+import me.dcii.flowmap.model.Journey;
 
 /**
  * Presents the map to the user. Implements {@link OnMapReadyCallback} interface for when
@@ -116,6 +119,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private static final String KEY_LAST_UPDATED_TIME = "last-updated-time";
     private static final String KEY_START_MARKER_POSITION = "start-marker-position";
     private static final String KEY_END_MARKER_POSITION = "end-marker-position";
+    private static final String KEY_JOURNEY_ID = "journey-id";
 
     /**
      * The desired interval for location updates (milliseconds). Updates maybe more or less
@@ -206,6 +210,21 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     private Location mCurrentLocation;
 
+    /**
+     * Represents the user {@link Journey}.
+     */
+    private Journey mJourney;
+
+    /**
+     * Represents the {@link Journey} primary identifier.
+     */
+    private String mJourneyId;
+
+    /**
+     * Represents the {@link Realm} instance.
+     */
+    Realm mRealm;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -223,6 +242,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         mRequestingLocationUpdates = false;
         mLastUpdateTime = "";
+        mJourney = null;
+        mJourneyId = null;
+
+        mRealm = Realm.getDefaultInstance();  // opens the default realm.
 
         // Updates values from previous instance of the activity.
         updateValuesFromBundle(savedInstanceState);
@@ -293,7 +316,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mLocationSettingsRequest = builder.build();
     }
 
-
     /**
      * Manipulates the map once available.
      * This callback is triggered when the map is ready to be used.
@@ -352,6 +374,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             // Update the value end marker.
             if (savedInstanceState.keySet().contains(KEY_END_MARKER_POSITION)) {
                 mEndMarkerPosition = savedInstanceState.getParcelable(KEY_END_MARKER_POSITION);
+            }
+
+            // Update journey model id.
+            if (savedInstanceState.keySet().contains(KEY_JOURNEY_ID)) {
+                mJourneyId = savedInstanceState.getString(KEY_JOURNEY_ID);
             }
         }
     }
@@ -474,6 +501,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                         setRequestingLocationUpdates(false,
                                 R.string.requesting_location_updates_stop);
                         addLocationEndMarker(latLng);
+
+                        // Update the user's end location.
+                        updateRealmObject(latLng);
                         updateUI();
                     }
                 });
@@ -509,7 +539,16 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         outState.putParcelable(KEY_LOCATION, mCurrentLocation);
         outState.putParcelable(KEY_START_MARKER_POSITION, mStartMarkerPosition);
         outState.putParcelable(KEY_END_MARKER_POSITION, mEndMarkerPosition);
+        outState.putString(KEY_JOURNEY_ID, mJourneyId);
         super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        // Close Realm distance.
+        mRealm.close();
     }
 
     @Override
@@ -579,9 +618,14 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     private void updateLocation() {
         if (mCurrentLocation != null && mRequestingLocationUpdates) {
+
             final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
                     mCurrentLocation.getLongitude());
             Toast.makeText(this, latLng.toString(), Toast.LENGTH_SHORT).show();
+
+            // Update the Journey instance from Realm.
+            updateRealmObject(latLng);
+
             if (mStartMarker == null) {
                 // Marker is null on first start. Hence animate and zoom-in on user's location.
                 updateLocationAnimate(latLng);
@@ -589,6 +633,41 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 // TODO: draw user movement.
             }
         }
+    }
+
+    /**
+     * Sets the {@link LatLng} journey position in the Realm {@link #mJourney} instance. If Journey
+     * is null, a new Journey is started and the Id stored in {@link #mJourneyId} else the journey is
+     * fetched from the {@link Realm} store using the {@link #mJourneyId} identifier.
+     *
+     * @param latLng the location to update.
+     */
+    private void updateRealmObject(LatLng latLng) {
+        // Persist realm objects in a transaction. This is done on the main thread as Realm is
+        // quite fast as specified in the docs but this could be updated to an async transaction.
+        mRealm.beginTransaction();
+        if (mJourney == null) {
+
+            if (mJourneyId == null) {
+                // Both mJourney and mJourneyId are null; Create new journey.
+                mJourney = mRealm.createObject(Journey.class, UUID.randomUUID().toString());
+
+                // Get Journey identifier for restoring on configuration change.
+                // There's very little overhead in re-accessing the data from Realm store.
+                mJourneyId = mJourney.getId();
+            } else {
+                // mJourneyId is not null on configuration change if Its value was restored.
+                // Get mJourney instance from the Realm store.
+                mJourney = mRealm.where(Journey.class).equalTo(Journey.FIELD_ID, mJourneyId).findFirst();
+            }
+        }
+        // TODO: Check to make sure the user has moved.
+        // TODO: Check user transport type.
+        // Adds LatLng position in the model list of intermediate locations.
+        mJourney.addLocation(latLng);
+
+        // Commit transaction if all goes well.
+        mRealm.commitTransaction();
     }
 
     /**
@@ -665,6 +744,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             mEndMarkerPosition = null;
         }
         setMyLocationEnabled(mRequestingLocationUpdates);
+        // prepare for new Journey. set journey and journeyId to null and a new Journey will be
+        // created when location updates are requested.
+        mJourney = null;
+        mJourneyId = null;
     }
 
     /**
