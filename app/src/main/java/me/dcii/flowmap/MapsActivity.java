@@ -140,6 +140,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private static final long FASTEST_UPDATE_INTERVAL = UPDATE_INTERVAL / 2;
 
     /**
+     * The smallest displacement distance in meters between location changed callbacks.
+     */
+    private static final float SMALLEST_DISPLACEMENT = 0.25f;
+
+    /**
      * Represents the Google map object.
      */
     private GoogleMap mMap;
@@ -327,7 +332,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         // Sets the fastest rate for active location updates.
         mLocationRequest.setFastestInterval(FASTEST_UPDATE_INTERVAL);
-
+        mLocationRequest.setSmallestDisplacement(SMALLEST_DISPLACEMENT);
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
 
@@ -815,22 +820,21 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * Draws the user's route on the map using the locations stored in Realm store.
      */
     private void drawRoute() {
-        if (mMap == null) {
+        // Stop execution if mMap or mJourney is empty.
+        if (mMap == null || mJourney == null) {
             return;
         }
 
-        PolylineOptions options = new PolylineOptions().width(5).color(Color.BLUE).geodesic(true);
-        if (mJourney != null) {
-            final RealmList<me.dcii.flowmap.model.Location> journeyLocations = mJourney.getLocations();
+        final PolylineOptions options = new PolylineOptions().width(5).color(Color.BLUE).geodesic(true);
+        final RealmList<me.dcii.flowmap.model.Location> journeyLocations = mJourney.getLocations();
 
-            for (int index = 0; index < journeyLocations.size(); index++) {
+        for (int index = 0; index < journeyLocations.size(); index++) {
 
-                final me.dcii.flowmap.model.Location location = journeyLocations.get(index);
-                final LatLng point = new LatLng(location.getLatitude(), location.getLongitude());
-                options.add(point);
-            }
-            mMap.addPolyline(options);
+            final me.dcii.flowmap.model.Location location = journeyLocations.get(index);
+            final LatLng point = new LatLng(location.getLatitude(), location.getLongitude());
+            options.add(point);
         }
+        mMap.addPolyline(options);
     }
 
     /**
