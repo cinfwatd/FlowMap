@@ -688,8 +688,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 mJourneyId = mJourney.getId();
             } else {
                 // mJourneyId is not null on configuration change if Its value was restored.
-                // Get mJourney instance from the Realm store.
-                mJourney = mRealm.where(Journey.class).equalTo(Journey.FIELD_ID, mJourneyId).findFirst();
+                // Get mJourney instance from the Realm store using the id.
+                restoreJourneyFromId();
             }
         }
         // TODO: Check to make sure the user has moved.
@@ -706,10 +706,20 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * This is used during device rotations to restore marker position.
      */
     private void updateMarkers() {
-
         addLocationStartMarker(mStartMarkerPosition);
         addLocationEndMarker(mEndMarkerPosition);
+        restoreJourneyFromId();  // Restore the journey if mJourneyId is not null.
+
         drawRoute();
+    }
+
+    /**
+     * Restore the {@link Journey} instance using the {@link Journey#id} identifier.
+     */
+    private void restoreJourneyFromId() {
+        if (mJourney == null && mJourneyId != null) {
+            mJourney = mRealm.where(Journey.class).equalTo(Journey.FIELD_ID, mJourneyId).findFirst();
+        }
     }
 
     /**
