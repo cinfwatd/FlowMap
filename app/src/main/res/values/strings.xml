@@ -16,6 +16,7 @@
     <string name="start_location">Start location</string>
     <string name="end_location">End location</string>
     <string name="journeys">Journeys</string>
+    <string name="deleted">Deleted</string>
 
     <plurals name="days">
         <item quantity="one">%d day,</item>

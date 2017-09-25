@@ -29,6 +29,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.helper.ItemTouchHelper;
 import android.view.MenuItem;
 import android.widget.Toast;
 
@@ -36,6 +37,7 @@ import io.realm.Realm;
 import io.realm.RealmResults;
 import me.dcii.flowmap.adapter.JourneyRecyclerViewAdapter;
 import me.dcii.flowmap.model.Journey;
+import me.dcii.flowmap.util.TouchHelperCallback;
 
 /**
  * Journey list activity.
@@ -68,6 +70,11 @@ public class JourneysActivity extends AppCompatActivity
                 .notEqualTo(Journey.FIELD_IS_DELETED, true).findAll();
         mJourneyAdapter = new JourneyRecyclerViewAdapter(realmResults, this);
         mRecyclerView.setAdapter(mJourneyAdapter);
+
+        // Attach touch helper/callback to recycler view.
+        final TouchHelperCallback touchHelperCallback = new TouchHelperCallback(mRealm);
+        final ItemTouchHelper touchHelper = new ItemTouchHelper(touchHelperCallback);
+        touchHelper.attachToRecyclerView(mRecyclerView);
     }
 
     @Override
