@@ -491,6 +491,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         // Remove location request when activity is in a paused or stopped state.
         mFusedLocationClient.removeLocationUpdates(mLocationCallback)
+                // TODO: OnCompleteListener is always not called on first request despite removing updates.
                 .addOnCompleteListener(this, new OnCompleteListener<Void>() {
                     @Override
                     public void onComplete(@NonNull Task<Void> task) {
@@ -664,7 +665,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // TODO: Check to make sure the user has moved.
         // TODO: Check user transport type.
         // Adds LatLng position in the model list of intermediate locations.
-        mJourney.addLocation(latLng);
+        if (mJourney != null) mJourney.addLocation(latLng);  // extra null check as findFirst() might return null.
 
         // Commit transaction if all goes well.
         mRealm.commitTransaction();
