@@ -276,8 +276,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.navigation_journeys) {
-//            final Intent journeysActivity = new Intent(this, JourneysActivity);
-//            startActivity(journeysActivity);
+            final Intent journeysActivity = new Intent(this, JourneysActivity.class);
+            startActivity(journeysActivity);
             return true;
         }
         return super.onOptionsItemSelected(item);
