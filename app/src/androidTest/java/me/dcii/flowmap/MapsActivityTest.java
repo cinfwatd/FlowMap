@@ -24,6 +24,8 @@
 
 package me.dcii.flowmap;
 
+import android.app.Activity;
+import android.app.Instrumentation;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.rule.ActivityTestRule;
 import android.support.test.runner.AndroidJUnit4;
@@ -33,6 +35,7 @@ import android.support.test.uiautomator.UiObject;
 import android.support.test.uiautomator.UiObjectNotFoundException;
 import android.support.test.uiautomator.UiSelector;
 import android.support.test.uiautomator.Until;
+import android.support.v7.app.AppCompatActivity;
 
 import org.junit.After;
 import org.junit.Before;
@@ -40,10 +43,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import static android.support.test.InstrumentationRegistry.getInstrumentation;
 import static android.support.test.espresso.Espresso.onView;
 import static android.support.test.espresso.action.ViewActions.click;
 import static android.support.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static android.support.test.espresso.matcher.ViewMatchers.withId;
+import static android.support.test.espresso.matcher.ViewMatchers.withText;
 import static org.junit.Assert.*;
 
 /**
@@ -60,6 +65,7 @@ public class MapsActivityTest {
 
     private UiDevice mDevice = null;
     private MapsActivity mapsActivity = null;
+    private Instrumentation.ActivityMonitor mJourneysActivityMonitor = null;
 
     @Rule
     public ActivityTestRule<MapsActivity> mapsActivityTestRule =
@@ -69,9 +75,11 @@ public class MapsActivityTest {
     @Before
     public void setUp() throws Exception {
         mapsActivity = mapsActivityTestRule.getActivity();
+        mJourneysActivityMonitor = getInstrumentation()
+                .addMonitor(JourneysActivity.class.getName(), null, false);
 
         // Initialise device instance.
-        mDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        mDevice = UiDevice.getInstance(getInstrumentation());
 
         // Wait for the app to appear
         mDevice.wait(Until.hasObject(By.pkg(MAPS_ACTIVITY_PACKAGE).depth(0)),
@@ -113,6 +121,7 @@ public class MapsActivityTest {
             }
     }
 
+    @Test
     public void testRequestLocationUpdateStop() {
         // Second click request stop updates.
         onView(withId(R.id.fab)).perform(click());
@@ -126,10 +135,23 @@ public class MapsActivityTest {
         }
     }
 
+    @Test
+    public void testJourneysActivityLaunch() {
+        assertNotNull(mapsActivity.findViewById(R.id.navigation_journeys));
+        onView(withId(R.id.navigation_journeys)).perform(click());
+
+        Activity journeysActivity = getInstrumentation()
+                .waitForMonitorWithTimeout(mJourneysActivityMonitor, LAUNCH_TIMEOUT);
+        assertNotNull(journeysActivity);
+        
+        journeysActivity.finish();
+    }
+
     @After
     public void tearDown() throws Exception {
         mapsActivity = null;
         mDevice = null;
+        mJourneysActivityMonitor = null;
     }
 
 }
