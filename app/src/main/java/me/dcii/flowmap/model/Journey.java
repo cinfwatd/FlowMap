@@ -26,10 +26,10 @@ package me.dcii.flowmap.model;
 
 import com.google.android.gms.maps.model.LatLng;
 
-import java.io.Serializable;
 import java.util.Date;
 import java.util.UUID;
 
+import io.realm.Realm;
 import io.realm.RealmList;
 import io.realm.RealmObject;
 import io.realm.annotations.PrimaryKey;
@@ -46,9 +46,11 @@ public class Journey extends RealmObject {
     private String id;  // Provide unique identifier.
 
     /**
-     * Represents the name of the Id field. This is used in querying the Realm store.
+     * Represents the names of the fields. These are used in querying the Realm store.
      */
     public static String FIELD_ID = "id";
+    public static String FIELD_IS_DELETED = "isDeleted";
+
 
     /**
      * RealmList of intermediate {@link } positions during user journey.
@@ -61,6 +63,16 @@ public class Journey extends RealmObject {
     private String transportTypeName;
 
     /**
+     * Flag used to implement soft deletion.
+     */
+    private boolean isDeleted;
+
+    /**
+     * Date the journey was deleted.
+     */
+    private Date dateDeleted;
+
+    /**
      * Constructor.
      *
      * @param id primary key identifier.
@@ -71,6 +83,8 @@ public class Journey extends RealmObject {
         this.id = id;
         this.locations = locations;
         this.transportTypeName = transportTypeName;
+        this.isDeleted = false;
+        this.dateDeleted = null;
     }
 
     /**
@@ -122,5 +136,50 @@ public class Journey extends RealmObject {
 
     public void addLocation(LatLng location) {
         locations.add(new Location(location.latitude, location.longitude));
+    }
+
+    public void setIsDeleted(boolean isDeleted) {
+        this.isDeleted = isDeleted;
+    }
+
+    public void setDateDeleted(Date dateDeleted) {
+        this.dateDeleted = dateDeleted;
+    }
+
+    /**
+     * Provides helper method to delete {@link Journey} from {@link Realm} store.
+     *
+     * @param realm the realm instance.
+     * @param id the {@link Journey#id} identifier.
+     * @param soft the flag representing soft or hard (real) deletion.
+     */
+    public static void delete(Realm realm, String id, boolean soft) {
+
+        final Journey journey = realm.where(Journey.class).equalTo(FIELD_ID, id).findFirst();
+        if (journey != null) {
+            if (soft) {
+
+                journey.setIsDeleted(true);
+                journey.setDateDeleted(new Date());
+                realm.insertOrUpdate(journey);
+            } else {
+                journey.deleteFromRealm();
+            }
+        }
+    }
+
+    /**
+     * Provides helper method to restore a soft deleted {@link Journey} from {@link Realm} store.
+     *
+     * @param realm the realm instance.
+     * @param id the {@link Journey#id} identifier.
+     */
+    public static void restore(Realm realm, String id) {
+        final Journey journey = realm.where(Journey.class).equalTo(FIELD_ID, id).findFirst();
+        if (journey != null) {
+            journey.setIsDeleted(false);
+            journey.setDateDeleted(null);
+            realm.insertOrUpdate(journey);
+        }
     }
 }
