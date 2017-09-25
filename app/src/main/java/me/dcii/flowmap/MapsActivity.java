@@ -698,12 +698,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * This is used during device rotations to restore marker position.
      */
     private void updateMarkers() {
-        if (mStartMarkerPosition != null) {
-            addLocationStartMarker(mStartMarkerPosition);
-        }
-        if (mEndMarkerPosition != null) {
-            addLocationEndMarker(mEndMarkerPosition);
-        }
+        addLocationStartMarker(mStartMarkerPosition);
+        addLocationEndMarker(mEndMarkerPosition);
     }
 
     /**
@@ -712,8 +708,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * @param latLng the start location {@link LatLng}.
      */
     private void addLocationStartMarker(LatLng latLng) {
-        // Stop execution if mMap is null.
-        if (mMap == null) return;
+        // Stop execution if mMap or latLng is null.
+        if (mMap == null || latLng == null) return;
 
         final MarkerOptions markerOptions = new MarkerOptions();
         markerOptions.position(latLng);
@@ -733,8 +729,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * @param latLng the end location {@link LatLng}.
      */
     private void addLocationEndMarker(LatLng latLng) {
-        // Stop execution if mMap is null.
-        if (mMap == null) return;
+        // Stop execution if mMap or lat is null.
+        if (mMap == null || latLng == null) return;
 
         final MarkerOptions markerOptions = new MarkerOptions();
         markerOptions.position(latLng);
