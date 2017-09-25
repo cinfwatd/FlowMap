@@ -74,17 +74,19 @@ public class JourneyRecyclerViewAdapter extends
         holder.bind(journey, mJourneyClickListener);
     }
 
-    class ViewHolder extends RecyclerView.ViewHolder {
+    public class ViewHolder extends RecyclerView.ViewHolder {
 
         private TextView mStartLocation;
         private TextView mEndLocation;
         private TextView mTransportTravelTime;
+        private String journeyId;
 
         ViewHolder(View view) {
             super(view);
             mStartLocation = view.findViewById(R.id.start_location);
             mEndLocation = view.findViewById(R.id.end_location);
             mTransportTravelTime = view.findViewById(R.id.transport_travel_time);
+            journeyId = "";
         }
 
         /**
@@ -95,6 +97,7 @@ public class JourneyRecyclerViewAdapter extends
          */
         private void bind(final Journey journey, final JourneyClickListener clickListener) {
 
+            journeyId = journey.getId();
             // Tint programmatically since resource drawable tint is supported in API level 23+.
             Drawable startDrawable = ContextCompat.getDrawable(
                     itemView.getContext(), R.drawable.ic_start_place_black_24dp);
@@ -146,6 +149,10 @@ public class JourneyRecyclerViewAdapter extends
                     clickListener.journeyClicked(journey);
                 }
             });
+        }
+
+        public String getJourneyId() {
+            return journeyId;
         }
     }
 
