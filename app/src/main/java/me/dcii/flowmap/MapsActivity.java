@@ -31,6 +31,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.location.Location;
 import android.net.Uri;
@@ -74,6 +75,7 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
@@ -84,6 +86,7 @@ import java.util.Date;
 import java.util.UUID;
 
 import io.realm.Realm;
+import io.realm.RealmList;
 import me.dcii.flowmap.model.Journey;
 
 /**
@@ -653,7 +656,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 // Marker is null on first start. Hence animate and zoom-in on user's location.
                 updateLocationAnimate(latLng);
             } else {
-                // TODO: draw user movement.
+                drawRoute();
             }
         }
     }
@@ -698,8 +701,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * This is used during device rotations to restore marker position.
      */
     private void updateMarkers() {
+
         addLocationStartMarker(mStartMarkerPosition);
         addLocationEndMarker(mEndMarkerPosition);
+        drawRoute();
     }
 
     /**
@@ -804,6 +809,28 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         ActivityCompat.requestPermissions(this,
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
                 REQUEST_CODE_LOCATION);
+    }
+
+    /**
+     * Draws the user's route on the map using the locations stored in Realm store.
+     */
+    private void drawRoute() {
+        if (mMap == null) {
+            return;
+        }
+
+        PolylineOptions options = new PolylineOptions().width(5).color(Color.BLUE).geodesic(true);
+        if (mJourney != null) {
+            final RealmList<me.dcii.flowmap.model.Location> journeyLocations = mJourney.getLocations();
+
+            for (int index = 0; index < journeyLocations.size(); index++) {
+
+                final me.dcii.flowmap.model.Location location = journeyLocations.get(index);
+                final LatLng point = new LatLng(location.getLatitude(), location.getLongitude());
+                options.add(point);
+            }
+            mMap.addPolyline(options);
+        }
     }
 
     /**
