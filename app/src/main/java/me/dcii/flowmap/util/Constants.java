@@ -31,6 +31,16 @@ package me.dcii.flowmap.util;
  */
 
 public final class Constants {
+    public static final int RSA_BIT_LENGTH = 2048;
+    public static final int AES_BIT_LENGTH = 256;
+
+    public static final String RSA_KEY_ALIAS = "sps_rsa_key";
+    public static final String AES_KEY_ALIAS = "sps_aes_key";
+
+    public final static String DEFAULT_CHARSET = "UTF-8";
+    public static final String KEYSTORE_PROVIDER = "AndroidKeyStore";
+
+
     public static final int SUCCESS_RESULT = 0;
     public static final int FAILURE_RESULT = 1;
     public static final String PACKAGE_NAME =
