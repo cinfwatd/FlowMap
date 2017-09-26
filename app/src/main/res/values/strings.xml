@@ -21,6 +21,7 @@
     <string name="error_invalid_lat_long_used">Invalid latitude and longitude provided.</string>
     <string name="error_no_address_found">No address found.</string>
     <string name="no_location_data_provided">No location data provided.</string>
+    <string name="app_fetch_address_service_description">FlowMap location address service.</string>
 
     <plurals name="days">
         <item quantity="one">%d day,</item>
