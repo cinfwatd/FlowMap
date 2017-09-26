@@ -33,10 +33,13 @@ import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
+import android.location.Geocoder;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.Looper;
+import android.os.ResultReceiver;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.annotation.StringRes;
@@ -88,6 +91,8 @@ import java.util.UUID;
 import io.realm.Realm;
 import io.realm.RealmList;
 import me.dcii.flowmap.model.Journey;
+import me.dcii.flowmap.service.FetchAddressIntentService;
+import me.dcii.flowmap.util.Constants;
 
 /**
  * Presents the map to the user. Implements {@link OnMapReadyCallback} interface for when
@@ -241,6 +246,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     private boolean mIsJourneyDetails;
 
+    /**
+     * Receives the {@link FetchAddressIntentService} results.
+     */
+    private AddressResultReceiver mResultReceiver;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -267,6 +277,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Updates values from previous instance of the activity.
         updateValuesFromBundle(savedInstanceState);
 
+        mResultReceiver = new AddressResultReceiver(new Handler());
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         mSettingsClient = LocationServices.getSettingsClient(this);
         mLocationChangeListener = null;
@@ -332,6 +343,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 if (mLocationChangeListener != null) {
                     mLocationChangeListener.onLocationChanged(mCurrentLocation);
                 }
+                startAddressIntentService();
                 updateLocation();
             }
         };
@@ -444,6 +456,29 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             startLocationUpdates(false);
         }
 //        TODO: Retrieve shared preferences.
+    }
+
+    /**
+     * Creates an intent, adds location data to it as an extra, and starts the intent service for
+     * fetching an address from {@link LatLng} locations.
+     */
+    private void startAddressIntentService() {
+        // Stop execution if no Geocoder is present.
+        if (!Geocoder.isPresent()) return;
+
+        // Create an intent for passing to the intent service responsible for fetching the address.
+        final Intent intent = new Intent(this, FetchAddressIntentService.class);
+
+        // Pass the result receiver as an extra to the service.
+        intent.putExtra(Constants.RECEIVER, mResultReceiver);
+
+        // Pass last location data as an extra to the service.
+        intent.putExtra(Constants.LOCATION_DATA_EXTRA, mCurrentLocation);
+
+        // Start the service. If the service isn't already running, it is instantiated and started
+        // (creating a process for it if needed); if it is running then it remains running. The
+        // service kills itself automatically once all intents are processed.
+        startService(intent);
     }
 
     /**
@@ -706,7 +741,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 restoreJourneyFromId();
             }
         }
-        // TODO: Check to make sure the user has moved.
+
         // TODO: Check user transport type.
         // Adds LatLng position in the model list of intermediate locations.
         if (mJourney != null) mJourney.addLocation(latLng);  // extra null check as findFirst() might return null.
@@ -944,6 +979,27 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     @Override
     public void deactivate() {
         mLocationChangeListener = null;
+    }
+
+    class AddressResultReceiver extends ResultReceiver {
+        public AddressResultReceiver(Handler handler) {
+            super(handler);
+        }
+
+        @Override
+        protected void onReceiveResult(int resultCode, Bundle resultData) {
+
+            // Get the address string
+            // or an error message sent from the intent service.
+            final String message = resultData.getString(Constants.RESULT_DATA_KEY);
+
+            // Show a toast message if an address was found.
+            if (resultCode == Constants.SUCCESS_RESULT) {
+                Toast.makeText(MapsActivity.this, message, Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(MapsActivity.this, message, Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     /**

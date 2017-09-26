@@ -37,6 +37,7 @@
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="me.dcii.flowmap.MapsActivity" />
         </activity>
+        <service android:name=".service.FetchAddressIntentService" />
     </application>
 
 </manifest>

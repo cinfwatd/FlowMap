@@ -17,6 +17,10 @@
     <string name="end_location">End location</string>
     <string name="journeys">Journeys</string>
     <string name="deleted">Deleted</string>
+    <string name="error_service_not_available">Service not available.</string>
+    <string name="error_invalid_lat_long_used">Invalid latitude and longitude provided.</string>
+    <string name="error_no_address_found">No address found.</string>
+    <string name="no_location_data_provided">No location data provided.</string>
 
     <plurals name="days">
         <item quantity="one">%d day,</item>
