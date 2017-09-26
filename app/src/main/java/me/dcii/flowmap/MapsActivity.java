@@ -536,24 +536,19 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
 
         // Remove location request when activity is in a paused or stopped state.
-        mFusedLocationClient.removeLocationUpdates(mLocationCallback)
-                // TODO: OnCompleteListener is always not called on first request despite removing updates.
-                .addOnCompleteListener(this, new OnCompleteListener<Void>() {
-                    @Override
-                    public void onComplete(@NonNull Task<Void> task) {
+        mFusedLocationClient.removeLocationUpdates(mLocationCallback);
+        // TODO: OnCompleteListener is always not called on first request despite removing updates.
 
-                        // Show end location marker.
-                        final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
-                                mCurrentLocation.getLongitude());
-                        setRequestingLocationUpdates(false,
-                                R.string.requesting_location_updates_stop);
-                        addLocationEndMarker(latLng);
+        // Show end location marker.
+        final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
+                mCurrentLocation.getLongitude());
+        setRequestingLocationUpdates(false,
+                R.string.requesting_location_updates_stop);
+        addLocationEndMarker(latLng);
 
-                        // Update the user's end location.
-                        updateRealmObject(latLng);
-                        updateUI();
-                    }
-                });
+        // Update the user's end location.
+        updateRealmObject(latLng);
+        updateUI();
     }
 
     /**
