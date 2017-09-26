@@ -236,6 +236,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     Realm mRealm;
 
+    /**
+     * flag used to show that map is used to show journey details from the journey's recycler view.
+     */
+    private boolean mIsJourneyDetails;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -255,6 +260,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mLastUpdateTime = "";
         mJourney = null;
         mJourneyId = null;
+        mIsJourneyDetails = false;
 
         mRealm = Realm.getDefaultInstance();  // opens the default realm.
 
@@ -270,6 +276,16 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         createLocationCallback();
         createLocationRequest();
         buildLocationSettingsRequest();
+
+        handleIntent();
+    }
+
+    private void handleIntent() {
+        Bundle extras = getIntent().getExtras();
+        if (extras != null) {
+            final String journeyId = extras.getString(Journey.FIELD_ID);
+            restoreJourneyFromId(journeyId);
+        }
     }
 
     @Override
@@ -663,6 +679,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             } else {
                 drawRoute();
             }
+        } else if (mIsJourneyDetails) {
+            // Map is used to show journey details animate-zoom in to the journey start marker location.
+            updateLocationAnimate(mStartMarkerPosition);
         }
     }
 
@@ -720,6 +739,27 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (mJourney == null && mJourneyId != null) {
             mJourney = mRealm.where(Journey.class).equalTo(Journey.FIELD_ID, mJourneyId).findFirst();
         }
+    }
+
+    /**
+     * Restores the {@link Journey} instance using the provided {@link Journey#id} identifier. Also,
+     * it restores the marker positions from the journey instance. This is used when view store
+     * journeys.
+     *
+     * @param id
+     */
+    private void restoreJourneyFromId(String id) {
+        if (id == null) return;
+
+        mJourneyId = id;
+        restoreJourneyFromId();
+        mStartMarkerPosition = new LatLng(mJourney.getStartLocation().getLatitude(),
+                mJourney.getStartLocation().getLongitude());
+        mEndMarkerPosition = new LatLng(mJourney.getEndLocation().getLatitude(),
+                    mJourney.getEndLocation().getLongitude());
+
+        // mMap is used to show journey details.
+        mIsJourneyDetails = true;
     }
 
     /**

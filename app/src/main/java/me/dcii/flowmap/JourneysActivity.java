@@ -24,6 +24,7 @@
 
 package me.dcii.flowmap;
 
+import android.content.Intent;
 import android.support.v4.app.NavUtils;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -95,6 +96,8 @@ public class JourneysActivity extends AppCompatActivity
 
     @Override
     public void journeyClicked(Journey journey) {
-        Toast.makeText(this, "onClick", Toast.LENGTH_SHORT).show();
+        Intent intent = new Intent(this, MapsActivity.class);
+        intent.putExtra(Journey.FIELD_ID, journey.getId());
+        startActivity(intent);
     }
 }
