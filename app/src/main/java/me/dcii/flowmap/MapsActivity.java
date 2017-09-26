@@ -557,14 +557,16 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         super.onPause();
 
         // Remove location updates to save battery.
-        stopLocationUpdates();
+        stopLocationUpdates(false);
 //        TODO: Set shared preferences.
     }
 
     /**
-     * Removes location updates from the FusedLocationApi
+     * Removes location updates from the FusedLocationApi.
+     *
+     * @param notify flag used to decide on notifying the user of the location request status.
      */
-    private void stopLocationUpdates() {
+    private void stopLocationUpdates(final boolean notify) {
         if (!mRequestingLocationUpdates) {
             // Updates were never requested.
             return;
@@ -574,16 +576,20 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mFusedLocationClient.removeLocationUpdates(mLocationCallback);
         // TODO: OnCompleteListener is always not called on first request despite removing updates.
 
-        // Show end location marker.
-        final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
-                mCurrentLocation.getLongitude());
-        setRequestingLocationUpdates(false,
-                R.string.requesting_location_updates_stop);
-        addLocationEndMarker(latLng);
+        // notify flag is false during configuration changes. Stop requesting for location updates.
+        if (notify) {
 
-        // Update the user's end location.
-        updateRealmObject(latLng);
-        updateUI();
+            // Show end location marker.
+            final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
+                    mCurrentLocation.getLongitude());
+            setRequestingLocationUpdates(false,
+                    R.string.requesting_location_updates_stop);
+            addLocationEndMarker(latLng);
+
+            // Update the user's end location.
+            updateRealmObject(latLng);
+            updateUI();
+        }
     }
 
     /**
@@ -776,7 +782,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * it restores the marker positions from the journey instance. This is used when view store
      * journeys.
      *
-     * @param id
+     * @param id {@link Journey#id} identifier used to restore the {@link Journey} instance.
      */
     private void restoreJourneyFromId(String id) {
         if (id == null) return;
@@ -964,7 +970,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     public void onClick(View view) {
         if (mRequestingLocationUpdates) {
             // Requesting updates at the moment. Hence the request is to stop requiring updates.
-            stopLocationUpdates();
+            stopLocationUpdates(true);
         } else {
             // Not requesting updates at the moment. Hence the request is to start requiring updates.
             startLocationUpdates(true);
@@ -982,7 +988,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     class AddressResultReceiver extends ResultReceiver {
-        public AddressResultReceiver(Handler handler) {
+        AddressResultReceiver(Handler handler) {
             super(handler);
         }
 
