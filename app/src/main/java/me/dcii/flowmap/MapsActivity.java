@@ -27,18 +27,19 @@ package me.dcii.flowmap;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.IntentSender;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
-import android.location.Geocoder;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Looper;
+import android.os.IBinder;
 import android.os.ResultReceiver;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
@@ -57,16 +58,10 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.Toast;
 
-import com.google.android.gms.common.api.ApiException;
-import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationResult;
-import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
-import com.google.android.gms.location.LocationSettingsResponse;
-import com.google.android.gms.location.LocationSettingsStatusCodes;
 import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -79,19 +74,14 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.PolylineOptions;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.gms.tasks.Task;
 
-import java.text.DateFormat;
-import java.util.Date;
 import java.util.UUID;
 
 import io.realm.Realm;
 import io.realm.RealmList;
 import me.dcii.flowmap.model.Journey;
 import me.dcii.flowmap.service.FetchAddressIntentService;
+import me.dcii.flowmap.service.FlowLocationService;
 import me.dcii.flowmap.util.Constants;
 
 /**
@@ -105,6 +95,11 @@ import me.dcii.flowmap.util.Constants;
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,
         LocationSource, View.OnClickListener {
 
+    /**
+     * Application location service.
+     */
+    FlowLocationService mFlowLocationService;
+    boolean mBound = false;
 
     /**
      * Class name tag for debugging.
@@ -249,7 +244,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     /**
      * Receives the {@link FetchAddressIntentService} results.
      */
-    private AddressResultReceiver mResultReceiver;
+    private LocationResultReceiver mResultReceiver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -272,21 +267,13 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mJourneyId = null;
         mIsJourneyDetails = false;
 
+        // Initialise the location result receiver.
+        mResultReceiver = new LocationResultReceiver(new Handler());
+
         mRealm = Realm.getDefaultInstance();  // opens the default realm.
 
         // Updates values from previous instance of the activity.
         updateValuesFromBundle(savedInstanceState);
-
-        mResultReceiver = new AddressResultReceiver(new Handler());
-        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-        mSettingsClient = LocationServices.getSettingsClient(this);
-        mLocationChangeListener = null;
-
-        // Kick of the process of building the LocationCallback, LocationRequest, and
-        // LocationSettingsRequest objects.
-        createLocationCallback();
-        createLocationRequest();
-        buildLocationSettingsRequest();
 
         handleIntent();
     }
@@ -326,52 +313,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private void setFabTintColor(int colorRes) {
         mFab.getDrawable().setColorFilter(
                 ContextCompat.getColor(this, colorRes), PorterDuff.Mode.SRC_IN);
-    }
-
-    /**
-     * Creates the callback for receiving location events.
-     */
-    private void createLocationCallback() {
-        mLocationCallback = new LocationCallback() {
-            @Override
-            public void onLocationResult(LocationResult locationResult) {
-                super.onLocationResult(locationResult);
-
-                mCurrentLocation = locationResult.getLastLocation();
-                mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
-
-                if (mLocationChangeListener != null) {
-                    mLocationChangeListener.onLocationChanged(mCurrentLocation);
-                }
-                startAddressIntentService();
-                updateLocation();
-            }
-        };
-    }
-
-    /**
-     * Creates the location request and sets the intervals and priority.
-     */
-    private void createLocationRequest() {
-        mLocationRequest = new LocationRequest();
-
-        // Sets the desired interval for active location updates.
-        mLocationRequest.setInterval(UPDATE_INTERVAL);
-
-        // Sets the fastest rate for active location updates.
-        mLocationRequest.setFastestInterval(FASTEST_UPDATE_INTERVAL);
-        mLocationRequest.setSmallestDisplacement(SMALLEST_DISPLACEMENT);
-        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-    }
-
-    /**
-     * Uses the {@link LocationSettingsRequest.Builder} to build a {@link LocationSettingsRequest}
-     * that is used for checking if the user's device has the needed location settings.
-     */
-    private void buildLocationSettingsRequest() {
-        final LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder();
-        builder.addLocationRequest(mLocationRequest);
-        mLocationSettingsRequest = builder.build();
     }
 
     /**
@@ -419,11 +360,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 mCurrentLocation = savedInstanceState.getParcelable(KEY_LOCATION);
             }
 
-            // Update the value of mLastUpdateTime.
-            if (savedInstanceState.keySet().contains(KEY_LAST_UPDATED_TIME)) {
-                mLastUpdateTime = savedInstanceState.getString(KEY_LAST_UPDATED_TIME);
-            }
-
             // Update the value start marker.
             if (savedInstanceState.keySet().contains(KEY_START_MARKER_POSITION)) {
                 mStartMarkerPosition = savedInstanceState.getParcelable(KEY_START_MARKER_POSITION);
@@ -447,38 +383,19 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (!checkLocationPermission()) {
             requestLocationPermission();
         }
+
+        // Bind to FlowLocationService
+        Intent intent = new Intent(this, FlowLocationService.class);
+
+        // Pass the result receiver as an extra to the service.
+        intent.putExtra(Constants.LOCATION_RECEIVER, mResultReceiver);
+        startService(intent);
+        bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (mRequestingLocationUpdates && checkLocationPermission()) {
-            startLocationUpdates(false);
-        }
-//        TODO: Retrieve shared preferences.
-    }
-
-    /**
-     * Creates an intent, adds location data to it as an extra, and starts the intent service for
-     * fetching an address from {@link LatLng} locations.
-     */
-    private void startAddressIntentService() {
-        // Stop execution if no Geocoder is present.
-        if (!Geocoder.isPresent()) return;
-
-        // Create an intent for passing to the intent service responsible for fetching the address.
-        final Intent intent = new Intent(this, FetchAddressIntentService.class);
-
-        // Pass the result receiver as an extra to the service.
-        intent.putExtra(Constants.RECEIVER, mResultReceiver);
-
-        // Pass last location data as an extra to the service.
-        intent.putExtra(Constants.LOCATION_DATA_EXTRA, mCurrentLocation);
-
-        // Start the service. If the service isn't already running, it is instantiated and started
-        // (creating a process for it if needed); if it is running then it remains running. The
-        // service kills itself automatically once all intents are processed.
-        startService(intent);
     }
 
     /**
@@ -488,66 +405,27 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      *
      * @param notify flag used to decide on notifying the user of the location request status.
      */
-    @SuppressWarnings("MissingPermission")
     private void startLocationUpdates(final boolean notify) {
 
-        // Check if the device has the necessary location settings.
-        mSettingsClient.checkLocationSettings(mLocationSettingsRequest)
-                .addOnSuccessListener(this, new OnSuccessListener<LocationSettingsResponse>() {
-                    @Override
-                    public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
+        mFlowLocationService.startLocationUpdates();
 
-                        // if notify false, device is rotated.
-                        if (notify) {
-                            setRequestingLocationUpdates(true,
-                                    R.string.requesting_location_updates_start);
+        // if notify false, device is rotated.
+        if (notify) {
+            setRequestingLocationUpdates(true,
+                    R.string.requesting_location_updates_start);
 
-                            // Clears map markings.
-                            reInitialiseMap();
-                        } else {
-                            setRequestingLocationUpdates(true);
-                        }
-                        //noinspection MissingPermission
-                        mFusedLocationClient.requestLocationUpdates(mLocationRequest,
-                                mLocationCallback, Looper.myLooper());
-                    }
-                })
-                .addOnFailureListener(this, new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        final int statusCode = ((ApiException) e).getStatusCode();
-                        switch (statusCode) {
-                            case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
-                                // Location settings are not satisfied.
-                                try {
-                                    // Show dialog
-                                    ResolvableApiException rae = (ResolvableApiException) e;
-                                    rae.startResolutionForResult(MapsActivity.this,
-                                            REQUEST_CODE_CHECK_SETTINGS);
-                                } catch (IntentSender.SendIntentException sendEx) {
-                                    // pendingIntent unable to execute request.
-                                }
-                                break;
-                            case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
-                                setRequestingLocationUpdates(false,
-                                        R.string.error_inadequate_location_settings);
-                        }
-                    }
-                })
-                .addOnCompleteListener(this,
-                        new OnCompleteListener<LocationSettingsResponse>() {
-                            @Override
-                            public void onComplete(@NonNull Task<LocationSettingsResponse> task) {
-                                updateUI();
-                            }
-                        });
+            // Clears map markings.
+            reInitialiseMap();
+        } else {
+            setRequestingLocationUpdates(true);
+        }
     }
 
     /**
      * Updates UI fields.
      */
     private void updateUI() {
-        setFabEnabledState();
+        setFabEnabledState(mRequestingLocationUpdates);
         updateMarkers();
         updateLocation();
     }
@@ -561,20 +439,29 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 //        TODO: Set shared preferences.
     }
 
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Unbind from the FlowLocation service
+        if (mBound) {
+            unbindService(mConnection);
+            mBound = false;
+        }
+    }
+
     /**
      * Removes location updates from the FusedLocationApi.
      *
      * @param notify flag used to decide on notifying the user of the location request status.
      */
     private void stopLocationUpdates(final boolean notify) {
-        if (!mRequestingLocationUpdates) {
+        if (!mFlowLocationService.isRequestingLocationUpdates()) {
             // Updates were never requested.
             return;
         }
 
         // Remove location request when activity is in a paused or stopped state.
-        mFusedLocationClient.removeLocationUpdates(mLocationCallback);
-        // TODO: OnCompleteListener is always not called on first request despite removing updates.
+        mFlowLocationService.stopLocationUpdates();
 
         // notify flag is false during configuration changes. Stop requesting for location updates.
         if (notify) {
@@ -596,8 +483,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * Sets {@link FloatingActionButton} drawable image to represent available action.
      * The {@link FloatingActionButton} can be used to request update and stop requesting.
      */
-    private void setFabEnabledState() {
-        if (mRequestingLocationUpdates) {
+    private void setFabEnabledState(boolean flag) {
+        if (flag) {
             // Requesting location updates; show the disable location updates icon.
             mFab.setImageDrawable(ContextCompat.getDrawable(
                     MapsActivity.this, R.drawable.ic_location_off_black_24dp));
@@ -987,8 +874,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mLocationChangeListener = null;
     }
 
-    class AddressResultReceiver extends ResultReceiver {
-        AddressResultReceiver(Handler handler) {
+    /**
+     * Receives the location results from the {@link FlowLocationService}.
+     */
+    public class LocationResultReceiver extends ResultReceiver {
+        LocationResultReceiver(Handler handler) {
             super(handler);
         }
 
@@ -1001,9 +891,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
             // Show a toast message if an address was found.
             if (resultCode == Constants.SUCCESS_RESULT) {
-                Toast.makeText(MapsActivity.this, message, Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(MapsActivity.this, message, Toast.LENGTH_SHORT).show();
+                mCurrentLocation = resultData.getParcelable(Constants.LOCATION_DATA_EXTRA);
+
+                if (mCurrentLocation != null) {
+                    mLocationChangeListener.onLocationChanged(mCurrentLocation);
+                    updateLocation();
+                }
             }
         }
     }
@@ -1053,4 +946,27 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private void dialogPositiveButtonHandler() {
         performLocationPermissionRequest();
     }
+
+    /** Defines callbacks for service binding, passed to bindService() */
+    private ServiceConnection mConnection = new ServiceConnection() {
+
+        @Override
+        public void onServiceConnected(ComponentName className,
+                                       IBinder service) {
+            // We've bound to FlowLocationService, cast the IBinder and get FlowLocationService instance
+            FlowLocationService.FlowLocationServiceBinder binder = (FlowLocationService.FlowLocationServiceBinder) service;
+            mFlowLocationService = binder.getService();
+            mBound = true;
+
+            if (mRequestingLocationUpdates && checkLocationPermission()) {
+                startLocationUpdates(false);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            mFlowLocationService = null;
+            mBound = false;
+        }
+    };
 }
