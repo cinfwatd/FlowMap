@@ -26,6 +26,7 @@ package me.dcii.flowmap.model;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.text.TextUtils;
 
 import com.google.android.gms.maps.model.LatLng;
 
@@ -90,6 +91,9 @@ public class Journey extends RealmObject {
      */
     private Date dateDeleted;
 
+    private String startAddress;
+    private String endAddress;
+
     /**
      * Constructor.
      *
@@ -103,6 +107,8 @@ public class Journey extends RealmObject {
         this.transportTypeName = transportTypeName;
         this.isDeleted = false;
         this.dateDeleted = null;
+        this.startAddress = "";
+        this.endAddress = "";
     }
 
     /**
@@ -247,5 +253,49 @@ public class Journey extends RealmObject {
             journey.setDateDeleted(null);
             realm.insertOrUpdate(journey);
         }
+    }
+
+    /**
+     * Returns the start {@link android.location.Address} string address.
+     *
+     * @return the start address.
+     */
+    public String getStartAddress() {
+        if (TextUtils.isEmpty(startAddress)) {
+            // return the location co-ordinates toString if startAddress is empty.
+            return getStartLocation().toString();
+        }
+        return startAddress;
+    }
+
+    /**
+     * Sets the start {@link android.location.Address} string address.
+     *
+     * @param address the {@link android.location.Address} string representation.
+     */
+    public void setStartAddress(String address) {
+        this.startAddress = address;
+    }
+
+    /**
+     * Returns the end {@link android.location.Address} string address.
+     *
+     * @return the end address.
+     */
+    public String getEndAddress() {
+        if (TextUtils.isEmpty(endAddress)) {
+            // return the location co-ordinates toString if endAddress is empty.
+            return getEndLocation().toString();
+        }
+        return endAddress;
+    }
+
+    /**
+     * Sets the end {@link android.location.Address} string address.
+     *
+     * @param address the {@link android.location.Address} string representation.
+     */
+    public void setEndAddress(String address) {
+        this.endAddress = address;
     }
 }

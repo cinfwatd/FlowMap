@@ -106,7 +106,7 @@ public class JourneyRecyclerViewAdapter extends
             // Set tint color to Green for start location.
             DrawableCompat.setTint(startDrawable, Color.GREEN);
             DrawableCompat.setTintMode(startDrawable, PorterDuff.Mode.SRC_IN);
-            mStartLocation.setText(journey.getStartLocation().toString());
+            mStartLocation.setText(journey.getStartAddress());
             mStartLocation.setCompoundDrawablesRelativeWithIntrinsicBounds(
                     startDrawable, null, null, null);
 
@@ -116,7 +116,7 @@ public class JourneyRecyclerViewAdapter extends
             endDrawable = DrawableCompat.wrap(endDrawable);
             DrawableCompat.setTint(endDrawable, Color.RED);
             DrawableCompat.setTintMode(endDrawable, PorterDuff.Mode.SRC_IN);
-            mEndLocation.setText(journey.getEndLocation().toString());
+            mEndLocation.setText(journey.getEndAddress());
             mEndLocation.setCompoundDrawablesRelativeWithIntrinsicBounds(
                     endDrawable, null, null, null);
 
