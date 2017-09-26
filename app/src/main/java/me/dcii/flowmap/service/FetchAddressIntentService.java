@@ -79,7 +79,7 @@ public class FetchAddressIntentService extends IntentService {
     protected void onHandleIntent(@Nullable Intent intent) {
         String errorMessage = "";
 
-        mReceiver = intent.getParcelableExtra(Constants.RECEIVER);
+        mReceiver = intent.getParcelableExtra(Constants.ADDRESS_RECEIVER);
 
         // Check if receiver was properly registered.
         if (mReceiver == null) {
