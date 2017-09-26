@@ -455,7 +455,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * @param notify flag used to decide on notifying the user of the location request status.
      */
     private void stopLocationUpdates(final boolean notify) {
-        if (!mFlowLocationService.isRequestingLocationUpdates()) {
+        if (!mRequestingLocationUpdates) {
             // Updates were never requested.
             return;
         }
