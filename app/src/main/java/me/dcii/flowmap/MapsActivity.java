@@ -58,11 +58,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.Toast;
 
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationCallback;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationSettingsRequest;
-import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.LocationSource;
@@ -74,8 +69,6 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.PolylineOptions;
-
-import java.util.UUID;
 
 import io.realm.Realm;
 import io.realm.RealmList;
@@ -120,29 +113,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     /**
      * Keys for storing activity state in bundle.
      */
-    private static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting-location-update";
     private static final String KEY_LOCATION = "last-location";
-    private static final String KEY_LAST_UPDATED_TIME = "last-updated-time";
     private static final String KEY_START_MARKER_POSITION = "start-marker-position";
     private static final String KEY_END_MARKER_POSITION = "end-marker-position";
     private static final String KEY_JOURNEY_ID = "journey-id";
-
-    /**
-     * The desired interval for location updates (milliseconds). Updates maybe more or less
-     * frequent.
-     */
-    private static final long UPDATE_INTERVAL = 10000;
-
-    /**
-     * The fastest rate for active location updates. Updates will not be more frequent than this
-     * value.
-     */
-    private static final long FASTEST_UPDATE_INTERVAL = UPDATE_INTERVAL / 2;
-
-    /**
-     * The smallest displacement distance in meters between location changed callbacks.
-     */
-    private static final float SMALLEST_DISPLACEMENT = 0.25f;
+    private static final String KEY_JOURNEY_DETAIL_VIEW = "journey-detail-view";
 
     /**
      * Represents the Google map object.
@@ -160,7 +135,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private Marker mStartMarker = null;
 
     /**
-     * Map marker {@link LatLng} position. Used to rebuild start marker on configuration change.
+     * Map marker {@link LatLng} position. Used to rebuild start marker on configuration change when
+     * {@link GoogleMap} is used for journey detail viewing.
      */
     private LatLng mStartMarkerPosition = null;
 
@@ -170,51 +146,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private Marker mEndMarker = null;
 
     /**
-     * Map marker {@link LatLng} position. Used to rebuild end marker on configuration change.
+     * Map marker {@link LatLng} position. Used to rebuild end marker on configuration change when
+     * {@link GoogleMap} is used for journey detail viewing.
      */
     private LatLng mEndMarkerPosition = null;
-
-    /**
-     * Provides access to the fused location provider API
-     */
-    private FusedLocationProviderClient mFusedLocationClient;
-
-    /**
-     * Provides access to the location settings Api.
-     */
-    private SettingsClient mSettingsClient;
-
-    /**
-     * Stores the types of location services the user is interested in using. Used for checking
-     * settings to determine if the device has optimal location settings.
-     */
-    private LocationSettingsRequest mLocationSettingsRequest;
 
     /**
      * Provides the location change listener used for the location source interface.
      */
     private OnLocationChangedListener mLocationChangeListener;
-
-    /**
-     * Stores parameters for request to the FusedLocationProviderApi.
-     */
-    private LocationRequest mLocationRequest;
-
-    /**
-     * Keeps track of the location update request. Allows the user to start and stop
-     * the location tracking process.
-     */
-    private boolean mRequestingLocationUpdates;
-
-    /**
-     * Time when location was last updated represented as a string.
-     */
-    private String mLastUpdateTime;
-
-    /**
-     * Callback for the location events.
-     */
-    private LocationCallback mLocationCallback;
 
     /**
      * Represents the user's current geographical location at any given point.
@@ -261,8 +201,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mFab = findViewById(R.id.fab);
         mFab.setOnClickListener(this);
 
-        mRequestingLocationUpdates = false;
-        mLastUpdateTime = "";
         mJourney = null;
         mJourneyId = null;
         mIsJourneyDetails = false;
@@ -324,18 +262,17 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mMap = googleMap;
         mMap.getUiSettings().setMyLocationButtonEnabled(false);
         mMap.setLocationSource(this);
-        setMyLocationEnabled(mRequestingLocationUpdates);
         updateUI();
     }
 
     /**
      * Sets {@link GoogleMap#setMyLocationEnabled(boolean)}.
-     *
-     * @param myLocationEnabled boolean location enabled flag.
      */
-    private void setMyLocationEnabled(boolean myLocationEnabled) {
+    private void setMyLocationEnabled() {
+        if (mFlowLocationService == null) return;
+
         try {
-            mMap.setMyLocationEnabled(myLocationEnabled);
+            mMap.setMyLocationEnabled(mFlowLocationService.isRequestingLocationUpdates());
         } catch (SecurityException ex) {
             // Initiate location permission request.
             requestLocationPermission();
@@ -349,11 +286,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     private void updateValuesFromBundle(Bundle savedInstanceState) {
         if (savedInstanceState != null) {
-            // Update the value of mRequestingLocationUpdates.
-            if (savedInstanceState.keySet().contains(KEY_REQUESTING_LOCATION_UPDATES)) {
-                mRequestingLocationUpdates = savedInstanceState.getBoolean(
-                        KEY_REQUESTING_LOCATION_UPDATES);
-            }
 
             // Update the value of mCurrentLocation.
             if (savedInstanceState.keySet().contains(KEY_LOCATION)) {
@@ -373,6 +305,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             // Update journey model id.
             if (savedInstanceState.keySet().contains(KEY_JOURNEY_ID)) {
                 mJourneyId = savedInstanceState.getString(KEY_JOURNEY_ID);
+            }
+
+            // update if map is used as a Journey detail view.
+            if (savedInstanceState.keySet().contains(KEY_JOURNEY_DETAIL_VIEW)) {
+                mIsJourneyDetails = savedInstanceState.getBoolean(KEY_JOURNEY_DETAIL_VIEW);
             }
         }
     }
@@ -402,41 +339,28 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * Requests location updates from the FuseLocationClientApi. This request is only performed
      * when runtime location permission has been granted in devices running android M and above.
      * Also, the user is notified if enabled.
-     *
-     * @param notify flag used to decide on notifying the user of the location request status.
      */
-    private void startLocationUpdates(final boolean notify) {
-
-        mFlowLocationService.startLocationUpdates();
-
-        // if notify false, device is rotated.
-        if (notify) {
-            setRequestingLocationUpdates(true,
-                    R.string.requesting_location_updates_start);
-
-            // Clears map markings.
-            reInitialiseMap();
-        } else {
-            setRequestingLocationUpdates(true);
+    private void startLocationUpdates() {
+        if (mFlowLocationService == null) {
+            return;
         }
+        clearMap();
+        mFlowLocationService.startLocationUpdates();
+        notifyRequestingUpdates(R.string.requesting_location_updates_start);
+        updateUI();
     }
 
     /**
      * Updates UI fields.
      */
     private void updateUI() {
-        setFabEnabledState(mRequestingLocationUpdates);
-        updateMarkers();
+        setFabEnabledState();
         updateLocation();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-
-        // Remove location updates to save battery.
-        stopLocationUpdates(false);
-//        TODO: Set shared preferences.
     }
 
     @Override
@@ -451,40 +375,28 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     /**
      * Removes location updates from the FusedLocationApi.
-     *
-     * @param notify flag used to decide on notifying the user of the location request status.
      */
-    private void stopLocationUpdates(final boolean notify) {
-        if (!mRequestingLocationUpdates) {
-            // Updates were never requested.
+    private void stopLocationUpdates() {
+        if (mFlowLocationService == null) {
             return;
         }
-
         // Remove location request when activity is in a paused or stopped state.
         mFlowLocationService.stopLocationUpdates();
-
-        // notify flag is false during configuration changes. Stop requesting for location updates.
-        if (notify) {
-
-            // Show end location marker.
-            final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
-                    mCurrentLocation.getLongitude());
-            setRequestingLocationUpdates(false,
-                    R.string.requesting_location_updates_stop);
-            addLocationEndMarker(latLng);
-
-            // Update the user's end location.
-            updateRealmObject(latLng);
-            updateUI();
-        }
+        notifyRequestingUpdates(R.string.requesting_location_updates_stop);
+        updateUI();
     }
 
     /**
      * Sets {@link FloatingActionButton} drawable image to represent available action.
      * The {@link FloatingActionButton} can be used to request update and stop requesting.
      */
-    private void setFabEnabledState(boolean flag) {
-        if (flag) {
+    private void setFabEnabledState() {
+        // Stop execution if mFlowLocationService is null.
+        if (mFlowLocationService == null) {
+            return;
+        }
+
+        if (mFlowLocationService.isRequestingLocationUpdates()) {
             // Requesting location updates; show the disable location updates icon.
             mFab.setImageDrawable(ContextCompat.getDrawable(
                     MapsActivity.this, R.drawable.ic_location_off_black_24dp));
@@ -504,12 +416,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     @Override
     public void onSaveInstanceState(Bundle outState) {
-        outState.putBoolean(KEY_REQUESTING_LOCATION_UPDATES, mRequestingLocationUpdates);
-        outState.putString(KEY_LAST_UPDATED_TIME, mLastUpdateTime);
         outState.putParcelable(KEY_LOCATION, mCurrentLocation);
         outState.putParcelable(KEY_START_MARKER_POSITION, mStartMarkerPosition);
         outState.putParcelable(KEY_END_MARKER_POSITION, mEndMarkerPosition);
         outState.putString(KEY_JOURNEY_ID, mJourneyId);
+        outState.putBoolean(KEY_JOURNEY_DETAIL_VIEW, mIsJourneyDetails);
         super.onSaveInstanceState(outState);
     }
 
@@ -528,11 +439,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             case REQUEST_CODE_CHECK_SETTINGS:
                 switch (resultCode) {
                     case Activity.RESULT_OK:
-                        startLocationUpdates(true);
+                        startLocationUpdates();
                         break;
                     case Activity.RESULT_CANCELED:
                         // User chose not to make required location changes.
-                        mRequestingLocationUpdates = false;
                         updateUI();
                         break;
                 }
@@ -541,22 +451,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     /**
-     * Sets {@link #mRequestingLocationUpdates} status from the provided value.
+     * Notifies the user of the change in {@link FlowLocationService#isRequestingLocationUpdates()}.
      *
-     * @param requestingUpdates current request status.
-     */
-    private void setRequestingLocationUpdates(boolean requestingUpdates) {
-        mRequestingLocationUpdates = requestingUpdates;
-    }
-
-    /**
-     * Sets {@link #mRequestingLocationUpdates} status and informs the user of the change.
-     *
-     * @param requestingUpdates current request status.
      * @param messageRes the user message resource Id.
      */
-    private void setRequestingLocationUpdates(boolean requestingUpdates, @StringRes int messageRes) {
-        setRequestingLocationUpdates(requestingUpdates);
+    private void notifyRequestingUpdates(@StringRes int messageRes) {
         Toast.makeText(this, messageRes, Toast.LENGTH_SHORT).show();
     }
 
@@ -565,12 +464,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      *
      * @param latLng provided user {@link LatLng}.
      */
-    private void updateLocationAnimate(LatLng latLng) {
+    private void focusLocationAnimate(LatLng latLng) {
         // Stop execution if mMap is null.
         if (mMap == null) return;
-
-        // add location start marker.
-        addLocationStartMarker(latLng);
 
         // animate and zoom-in to provided LatLng position.
         mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng));
@@ -587,81 +483,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * Updates user location with provided location information.
      */
     private void updateLocation() {
-        if (mCurrentLocation != null && mRequestingLocationUpdates) {
-
-            final LatLng latLng = new LatLng(mCurrentLocation.getLatitude(),
-                    mCurrentLocation.getLongitude());
-            Toast.makeText(this, latLng.toString(), Toast.LENGTH_SHORT).show();
-
-            // Update the Journey instance from Realm.
-            updateRealmObject(latLng);
-
-            if (mStartMarker == null) {
-                // Marker is null on first start. Hence animate and zoom-in on user's location.
-                updateLocationAnimate(latLng);
-            } else {
-                drawRoute();
-            }
-        } else if (mIsJourneyDetails) {
-            // Map is used to show journey details animate-zoom in to the journey start marker location.
-            updateLocationAnimate(mStartMarkerPosition);
-        }
-    }
-
-    /**
-     * Sets the {@link LatLng} journey position in the Realm {@link #mJourney} instance. If Journey
-     * is null, a new Journey is started and the Id stored in {@link #mJourneyId} else the journey is
-     * fetched from the {@link Realm} store using the {@link #mJourneyId} identifier.
-     *
-     * @param latLng the location to update.
-     */
-    private void updateRealmObject(LatLng latLng) {
-        // Persist realm objects in a transaction. This is done on the main thread as Realm is
-        // quite fast as specified in the docs but this could be updated to an async transaction.
-        mRealm.beginTransaction();
-        if (mJourney == null) {
-
-            if (mJourneyId == null) {
-                // Both mJourney and mJourneyId are null; Create new journey.
-                mJourney = mRealm.createObject(Journey.class, UUID.randomUUID().toString());
-
-                // Get Journey identifier for restoring on configuration change.
-                // There's very little overhead in re-accessing the data from Realm store.
-                mJourneyId = mJourney.getId();
-            } else {
-                // mJourneyId is not null on configuration change if Its value was restored.
-                // Get mJourney instance from the Realm store using the id.
-                restoreJourneyFromId();
-            }
-        }
-
-        // TODO: Check user transport type.
-        // Adds LatLng position in the model list of intermediate locations.
-        if (mJourney != null) mJourney.addLocation(latLng);  // extra null check as findFirst() might return null.
-
-        // Commit transaction if all goes well.
-        mRealm.commitTransaction();
-    }
-
-    /**
-     * Adds location markers to map provided the respective marker position is not null.
-     * This is used during device rotations to restore marker position.
-     */
-    private void updateMarkers() {
-        addLocationStartMarker(mStartMarkerPosition);
-        addLocationEndMarker(mEndMarkerPosition);
-        restoreJourneyFromId();  // Restore the journey if mJourneyId is not null.
-
+        setMyLocationEnabled();
         drawRoute();
-    }
-
-    /**
-     * Restore the {@link Journey} instance using the {@link Journey#id} identifier.
-     */
-    private void restoreJourneyFromId() {
-        if (mJourney == null && mJourneyId != null) {
-            mJourney = mRealm.where(Journey.class).equalTo(Journey.FIELD_ID, mJourneyId).findFirst();
-        }
     }
 
     /**
@@ -672,10 +495,17 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * @param id {@link Journey#id} identifier used to restore the {@link Journey} instance.
      */
     private void restoreJourneyFromId(String id) {
-        if (id == null) return;
+        if (id == null) {
+            return;
+        }
+
+        mJourney = mRealm.where(Journey.class).equalTo(Journey.FIELD_ID, mJourneyId).findFirst();
+        // Check to make sure the mJourney exist.
+        if (mJourney == null) {
+            return;
+        }
 
         mJourneyId = id;
-        restoreJourneyFromId();
         mStartMarkerPosition = new LatLng(mJourney.getStartLocation().getLatitude(),
                 mJourney.getStartLocation().getLongitude());
         mEndMarkerPosition = new LatLng(mJourney.getEndLocation().getLatitude(),
@@ -730,7 +560,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     /**
      * Clears map markings and enable {@link GoogleMap#setMyLocationEnabled(boolean)}.
      */
-    private void reInitialiseMap() {
+    private void clearMap() {
         // Stop execution if mMap is mull.
         if (mMap == null) return;
 
@@ -745,11 +575,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             mEndMarker = null;
             mEndMarkerPosition = null;
         }
-        setMyLocationEnabled(mRequestingLocationUpdates);
-        // prepare for new Journey. set journey and journeyId to null and a new Journey will be
-        // created when location updates are requested.
+        // Prepare for new Journey. set journey and journeyId to null. These are only used for
+        // viewing saved journeys.
         mJourney = null;
         mJourneyId = null;
+        mIsJourneyDetails = false;
     }
 
     /**
@@ -793,14 +623,60 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * Draws the user's route on the map using the locations stored in Realm store.
      */
     private void drawRoute() {
-        // Stop execution if mMap or mJourney is empty.
-        if (mMap == null || mJourney == null) {
+        RealmList<me.dcii.flowmap.model.Location> journeyLocations = null;
+        boolean showEndMaker = false;
+        if (mFlowLocationService != null && mFlowLocationService.getJourney() != null) {
+            // Get active journey locations.
+            journeyLocations = mFlowLocationService.getJourney().getLocations();
+
+            // Show end marker when user just stopped tracking.
+            showEndMaker = !mFlowLocationService.isRequestingLocationUpdates();
+        } else if (mIsJourneyDetails && mJourney != null) {
+            // Get old (currently viewed) journey's locations.
+            journeyLocations = mJourney.getLocations();
+
+            // Show end marker since mMap is used to view old journey.
+            showEndMaker = true;
+        }
+
+        // Check to make sure journey locations are provided.
+        if (journeyLocations == null) {
+            return;
+        }
+
+        // Add location markers.
+        final int firstIndex = 0;
+        final LatLng firstMarkerLatLng = new LatLng(journeyLocations.get(firstIndex).getLatitude(),
+                journeyLocations.get(firstIndex).getLongitude());
+        if (mStartMarker == null) {
+            focusLocationAnimate(firstMarkerLatLng);
+        }
+        addLocationStartMarker(firstMarkerLatLng);
+
+        // Check if to show the end marker.
+        // Show endMarker when mMap is used to view journey or when the user just stopped tracking.
+        if (showEndMaker) {
+            final int lastIndex = journeyLocations.size() - 1;
+            // Not requesting location updates and journey is not null hence, show the endMarker.
+            addLocationEndMarker(new LatLng(journeyLocations.get(lastIndex).getLatitude(),
+                    journeyLocations.get(lastIndex).getLongitude()));
+        }
+
+        // Draw polylines.
+        drawRoute(journeyLocations);
+    }
+
+    /**
+     * Does the actual drawing of polylines on the map.
+     *
+     * @param journeyLocations {@link me.dcii.flowmap.model.Location} to draw on the map.
+     */
+    private void drawRoute(RealmList<me.dcii.flowmap.model.Location> journeyLocations) {
+        if (mMap == null || journeyLocations.size() == 0) {
             return;
         }
 
         final PolylineOptions options = new PolylineOptions().width(5).color(Color.BLUE).geodesic(true);
-        final RealmList<me.dcii.flowmap.model.Location> journeyLocations = mJourney.getLocations();
-
         for (int index = 0; index < journeyLocations.size(); index++) {
 
             final me.dcii.flowmap.model.Location location = journeyLocations.get(index);
@@ -828,8 +704,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     // User interaction was interrupted, the permission request was cancelled.
                 } else if  (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
-                    if (mRequestingLocationUpdates) {
-                        startLocationUpdates(true);
+                    if (mFlowLocationService != null && mFlowLocationService.isRequestingLocationUpdates()) {
+                        startLocationUpdates();
                     }
                 } else {
                     // Permission denied. Notify user that they have rejected a core permission
@@ -855,12 +731,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onClick(View view) {
-        if (mRequestingLocationUpdates) {
+        // Stop execution if location service is null.
+        if (mFlowLocationService == null) return;
+
+        if (mFlowLocationService.isRequestingLocationUpdates()) {
             // Requesting updates at the moment. Hence the request is to stop requiring updates.
-            stopLocationUpdates(true);
+            stopLocationUpdates();
         } else {
             // Not requesting updates at the moment. Hence the request is to start requiring updates.
-            startLocationUpdates(true);
+            startLocationUpdates();
         }
     }
 
@@ -885,17 +764,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         @Override
         protected void onReceiveResult(int resultCode, Bundle resultData) {
 
-            // Get the address string
-            // or an error message sent from the intent service.
-            final String message = resultData.getString(Constants.RESULT_DATA_KEY);
-
-            // Show a toast message if an address was found.
+            // Location message received.
             if (resultCode == Constants.SUCCESS_RESULT) {
                 mCurrentLocation = resultData.getParcelable(Constants.LOCATION_DATA_EXTRA);
 
                 if (mCurrentLocation != null) {
-                    mLocationChangeListener.onLocationChanged(mCurrentLocation);
                     updateLocation();
+                }
+                if (mLocationChangeListener != null) {
+                    mLocationChangeListener.onLocationChanged(mCurrentLocation);
                 }
             }
         }
@@ -957,10 +834,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             FlowLocationService.FlowLocationServiceBinder binder = (FlowLocationService.FlowLocationServiceBinder) service;
             mFlowLocationService = binder.getService();
             mBound = true;
-
-            if (mRequestingLocationUpdates && checkLocationPermission()) {
-                startLocationUpdates(false);
-            }
+            updateUI();
         }
 
         @Override

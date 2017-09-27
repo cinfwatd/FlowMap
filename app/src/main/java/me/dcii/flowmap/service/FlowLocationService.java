@@ -39,9 +39,7 @@ import android.os.Looper;
 import android.os.ResultReceiver;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
 import android.support.v4.app.ActivityCompat;
-import android.util.Log;
 import android.widget.Toast;
 
 import com.google.android.gms.common.api.ApiException;
@@ -59,12 +57,9 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
-import java.text.DateFormat;
-import java.util.Date;
 import java.util.UUID;
 
 import io.realm.Realm;
-import me.dcii.flowmap.R;
 import me.dcii.flowmap.model.Journey;
 import me.dcii.flowmap.util.Constants;
 
@@ -126,11 +121,6 @@ public class FlowLocationService extends Service {
     private boolean mRequestingLocationUpdates;
 
     /**
-     * Time when location was last updated represented as a string.
-     */
-    private String mLastUpdateTime;
-
-    /**
      * Callback for the location events.
      */
     private LocationCallback mLocationCallback;
@@ -144,11 +134,6 @@ public class FlowLocationService extends Service {
      * Represents the user {@link Journey}.
      */
     private Journey mJourney;
-
-    /**
-     * Represents the {@link Journey} primary identifier.
-     */
-    private String mJourneyId;
 
     /**
      * Represents the {@link Realm} instance.
@@ -186,7 +171,6 @@ public class FlowLocationService extends Service {
     public void onCreate() {
 
         mJourney = null;
-        mJourneyId = null;
 
         mRealm = Realm.getDefaultInstance();  // opens the default realm.
 
@@ -221,10 +205,8 @@ public class FlowLocationService extends Service {
                 super.onLocationResult(locationResult);
 
                 mCurrentLocation = locationResult.getLastLocation();
-                mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
 
-                Log.d("Shout", mCurrentLocation.toString());
-
+                // Start the address service to get the Location address if available.
                 startAddressIntentService();
                 deliverLocationResult(mCurrentLocation);
                 updateLocation();
@@ -310,6 +292,9 @@ public class FlowLocationService extends Service {
     @SuppressWarnings("MissingPermission")
     public void startLocationUpdates() {
 
+        // Set mRequestingLocationUpdates to true and set mJourney to null.
+        setRequestingLocationUpdates(true);
+        mJourney = null;  // new Journey is created if the value is null;
         // Check if the device has the necessary location settings.
         mSettingsClient.checkLocationSettings(mLocationSettingsRequest)
 
@@ -317,11 +302,9 @@ public class FlowLocationService extends Service {
                     @Override
                     public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
 
-
                         //noinspection MissingPermission
                         mFusedLocationClient.requestLocationUpdates(mLocationRequest,
                                 mLocationCallback, Looper.myLooper());
-                        mRequestingLocationUpdates = true;
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
@@ -341,8 +324,7 @@ public class FlowLocationService extends Service {
                                 }
                                 break;
                             case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
-                                setRequestingLocationUpdates(false,
-                                        R.string.error_inadequate_location_settings);
+                                setRequestingLocationUpdates(false);
                         }
                     }
                 });
@@ -359,11 +341,20 @@ public class FlowLocationService extends Service {
 
         // Remove location request when activity is in a paused or stopped state.
         mFusedLocationClient.removeLocationUpdates(mLocationCallback);
-        mRequestingLocationUpdates = false;
+        setRequestingLocationUpdates(false);
     }
 
+    /**
+     * Returns the location updates status.
+     *
+     * @return the location update status flag.
+     */
     public boolean isRequestingLocationUpdates() {
         return mRequestingLocationUpdates;
+    }
+
+    public Journey getJourney() {
+        return mJourney;
     }
 
     @Override
@@ -390,20 +381,8 @@ public class FlowLocationService extends Service {
     }
 
     /**
-     * Sets {@link #mRequestingLocationUpdates} status and informs the user of the change.
-     *
-     * @param requestingUpdates current request status.
-     * @param messageRes the user message resource Id.
-     */
-    private void setRequestingLocationUpdates(boolean requestingUpdates, @StringRes int messageRes) {
-        setRequestingLocationUpdates(requestingUpdates);
-        Toast.makeText(this, messageRes, Toast.LENGTH_SHORT).show();
-    }
-
-    /**
      * Sets the {@link LatLng} journey position in the Realm {@link #mJourney} instance. If Journey
-     * is null, a new Journey is started and the Id stored in {@link #mJourneyId} else the journey is
-     * fetched from the {@link Realm} store using the {@link #mJourneyId} identifier.
+     * is null, a new Journey is started.
      *
      * @param latLng the location to update.
      */
@@ -413,23 +392,13 @@ public class FlowLocationService extends Service {
         mRealm.beginTransaction();
         if (mJourney == null) {
 
-            if (mJourneyId == null) {
-                // Both mJourney and mJourneyId are null; Create new journey.
-                mJourney = mRealm.createObject(Journey.class, UUID.randomUUID().toString());
-
-                // Get Journey identifier for restoring on configuration change.
-                // There's very little overhead in re-accessing the data from Realm store.
-                mJourneyId = mJourney.getId();
-            } else {
-                // mJourneyId is not null on configuration change if Its value was restored.
-                // Get mJourney instance from the Realm store using the id.
-//                restoreJourneyFromId();
-            }
+            // mJourney is null; Create new journey.
+            mJourney = mRealm.createObject(Journey.class, UUID.randomUUID().toString());
         }
 
         // TODO: Check user transport type.
         // Adds LatLng position in the model list of intermediate locations.
-        if (mJourney != null) mJourney.addLocation(latLng);  // extra null check as findFirst() might return null.
+        mJourney.addLocation(latLng);
 
         // Commit transaction if all goes well.
         mRealm.commitTransaction();
