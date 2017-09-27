@@ -30,5 +30,5 @@ package me.dcii.flowmap.model;
  * @author Dogak Cinfwat.
  */
 public enum TransportType {
-    WALKING, RUNNING, CYCLING, DRIVING
+    WALKING, RUNNING, CYCLING, DRIVING, OTHERS
 }

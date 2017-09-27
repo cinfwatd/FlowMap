@@ -136,10 +136,14 @@ public class JourneyRecyclerViewAdapter extends
                     mTransportTravelTime.setCompoundDrawablesRelativeWithIntrinsicBounds(
                             R.drawable.ic_directions_car_black_24dp, 0, 0, 0);
                     return;
-                default:
-                    // Walking.
+                case WALKING:
                     mTransportTravelTime.setCompoundDrawablesRelativeWithIntrinsicBounds(
                             R.drawable.ic_directions_walk_black_24dp, 0, 0, 0);
+                    return;
+                default:
+                    // Show time.
+                    mTransportTravelTime.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                            R.drawable.ic_access_time_black_24dp, 0, 0, 0);
             }
 
             // itemView from parent ViewHolder class.

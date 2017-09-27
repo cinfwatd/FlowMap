@@ -115,7 +115,7 @@ public class Journey extends RealmObject {
      * Empty constructor.
      */
     public Journey() {
-        this(UUID.randomUUID().toString(),new RealmList<Location>(), TransportType.WALKING.name());
+        this(UUID.randomUUID().toString(),new RealmList<Location>(), TransportType.OTHERS.name());
     }
 
     public Location getStartLocation() {
