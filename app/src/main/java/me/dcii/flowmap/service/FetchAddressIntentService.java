@@ -58,6 +58,16 @@ public class FetchAddressIntentService extends IntentService {
      */
     protected ResultReceiver mReceiver;
 
+    /**
+     * Represents the {@link me.dcii.flowmap.model.Journey#startAddress} or
+     * {@link me.dcii.flowmap.model.Journey#endAddress} request.
+     */
+    private int mAddressRequestCode;
+
+    /**
+     * Represents the {@link me.dcii.flowmap.model.Journey#id} identifier.
+     */
+    private String mJourneyId;
 
     /**
      * This constructor is required, and calls the super IntentService(String)
@@ -93,6 +103,27 @@ public class FetchAddressIntentService extends IntentService {
         // send an error error message and return.
         if (location == null) {
             errorMessage = getString(R.string.no_location_data_provided);
+            deliverResultToReceiver(Constants.FAILURE_RESULT, errorMessage);
+            return;
+        }
+
+        // Get the address start or end lookup code. Set the default value to 0 which will
+        // signify that address requst code was not specified.
+        mAddressRequestCode = intent.getIntExtra(Constants.ADDRESS_LOOKUP, 0);
+
+        // Check to make sure the address request code is specified.
+        if (mAddressRequestCode == 0) {
+            errorMessage = getString(R.string.error_no_adddress_request_code);
+            deliverResultToReceiver(Constants.FAILURE_RESULT, errorMessage);
+            return;
+        }
+
+        // Get the journey Id for the address.
+        mJourneyId = intent.getStringExtra(Constants.JOURNEY_ID_ADDRESS_LOOK);
+
+        // Check to make sure the journey Id is not null or empty.
+        if (TextUtils.isEmpty(mJourneyId)) {
+            errorMessage = getString(R.string.error_no_journey_id);
             deliverResultToReceiver(Constants.FAILURE_RESULT, errorMessage);
             return;
         }
@@ -155,6 +186,13 @@ public class FetchAddressIntentService extends IntentService {
     private void deliverResultToReceiver(int resultCode, String message) {
         Bundle bundle = new Bundle();
         bundle.putString(Constants.RESULT_DATA_KEY, message);
+
+        if (resultCode == Constants.SUCCESS_RESULT) {
+            // Set the journey Id and address lookup type: start or end, when successful.
+            bundle.putString(Constants.JOURNEY_ID_ADDRESS_LOOK, mJourneyId);
+            bundle.putInt(Constants.ADDRESS_LOOKUP, mAddressRequestCode);
+        }
+
         mReceiver.send(resultCode, bundle);
     }
 }

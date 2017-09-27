@@ -40,6 +40,7 @@ import android.os.ResultReceiver;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
+import android.text.TextUtils;
 import android.widget.Toast;
 
 import com.google.android.gms.common.api.ApiException;
@@ -155,6 +156,11 @@ public class FlowLocationService extends Service {
      */
     private ResultReceiver mLocationResultReceiver;
 
+    /**
+     * Flags used to check if the address lookup intent service should be dispatched.
+     */
+    private boolean mIsStartLocationAddressFetched;
+    private boolean mIsEndLocationAddressFetched;
 
     /**
      * Class used for the client Binder.  Because we know this service always
@@ -171,6 +177,8 @@ public class FlowLocationService extends Service {
     public void onCreate() {
 
         mJourney = null;
+        mIsStartLocationAddressFetched = false;
+        mIsEndLocationAddressFetched = false;
 
         mRealm = Realm.getDefaultInstance();  // opens the default realm.
 
@@ -205,9 +213,6 @@ public class FlowLocationService extends Service {
                 super.onLocationResult(locationResult);
 
                 mCurrentLocation = locationResult.getLastLocation();
-
-                // Start the address service to get the Location address if available.
-                startAddressIntentService();
                 deliverLocationResult(mCurrentLocation);
                 updateLocation();
             }
@@ -232,6 +237,13 @@ public class FlowLocationService extends Service {
 
             // Update the Journey instance from Realm.
             updateRealmObject(latLng);
+
+            // Check to ensure the address lookup service is only requested if the current
+            // Journey's start address is not yet found.
+            if (!mIsStartLocationAddressFetched) {
+                // Start the address service to get the Location address for the start location.
+                startAddressIntentService(Constants.START_ADDRESS_LOOKUP);
+            }
         }
     }
 
@@ -264,8 +276,10 @@ public class FlowLocationService extends Service {
     /**
      * Creates an intent, adds location data to it as an extra, and starts the intent service for
      * fetching an address from {@link LatLng} locations.
+     *
+     * @param addressRequestCode Specifies if start or end location address is requested.
      */
-    private void startAddressIntentService() {
+    private void startAddressIntentService(int addressRequestCode) {
         // Stop execution if no Geocoder is present.
         if (!Geocoder.isPresent()) return;
 
@@ -274,6 +288,13 @@ public class FlowLocationService extends Service {
 
         // Pass the result receiver as an extra to the service.
         intent.putExtra(Constants.ADDRESS_RECEIVER, mResultReceiver);
+
+        // Specify the address being requested. Start or end address.
+        intent.putExtra(Constants.ADDRESS_LOOKUP, addressRequestCode);
+
+        // Speficy the journey Id. This enables the address to be passed on to the appropriate
+        // Journey even if the journey was ended before the address was returned.
+        intent.putExtra(Constants.JOURNEY_ID_ADDRESS_LOOK, mJourney.getId());
 
         // Pass last location data as an extra to the service.
         intent.putExtra(Constants.LOCATION_DATA_EXTRA, mCurrentLocation);
@@ -294,7 +315,7 @@ public class FlowLocationService extends Service {
 
         // Set mRequestingLocationUpdates to true and set mJourney to null.
         setRequestingLocationUpdates(true);
-        mJourney = null;  // new Journey is created if the value is null;
+        initialiseJourney();
         // Check if the device has the necessary location settings.
         mSettingsClient.checkLocationSettings(mLocationSettingsRequest)
 
@@ -331,6 +352,20 @@ public class FlowLocationService extends Service {
     }
 
     /**
+     * Used to make necessary initialisations for a new {@link Journey}.
+     */
+    private void initialiseJourney() {
+        mJourney = null;  // new Journey is created if the value is null;
+
+        if (mIsStartLocationAddressFetched && !mIsEndLocationAddressFetched) {
+            // If start address of the just concluded journey is found and the end address is not,
+            // make a last request for the end location address lookup before this new journey
+            // actually starts (Overrides last location, which is the previous journey's end location).
+            startAddressIntentService(Constants.END_ADDRESS_LOOK_UP);
+        }
+    }
+
+    /**
      * Removes location updates from the FusedLocationApi.
      */
     public void stopLocationUpdates() {
@@ -342,6 +377,10 @@ public class FlowLocationService extends Service {
         // Remove location request when activity is in a paused or stopped state.
         mFusedLocationClient.removeLocationUpdates(mLocationCallback);
         setRequestingLocationUpdates(false);
+
+        // Request address lookup with lastLocation as the end location.
+        // Start address intent with the last recorded location.
+        startAddressIntentService(Constants.END_ADDRESS_LOOK_UP);
     }
 
     /**
@@ -416,6 +455,88 @@ public class FlowLocationService extends Service {
         return permissionState == PackageManager.PERMISSION_GRANTED;
     }
 
+
+    /**
+     * Sets the start address for the {@link Journey} with the given {@link Journey#id} identifier.
+     *
+     * @param journeyId the {@link Journey#id}.
+     * @param address the {@link Journey#startAddress}.
+     */
+    private void setJourneyStartAddress(final String journeyId, final String address) {
+
+        // Check if the address is for the current journey. This is because the user could have
+        // Started a new journey since the lookup address request.
+        if (mJourney != null && TextUtils.equals(mJourney.getId(), journeyId)) {
+
+            // Begin Realm transaction to update journey. Realm transactions are compulsory.
+            mRealm.beginTransaction();
+
+            // Update the journey start address.
+            mJourney.setStartAddress(address);
+
+            // update flag to stop further start location address lookup.
+            mIsStartLocationAddressFetched = true;
+
+            // commit transaction if all goes well.
+            mRealm.commitTransaction();
+        } else {
+            // Address belongs to a different journey.
+            // Update the journey from the Realm store.
+
+            mRealm.executeTransactionAsync(new Realm.Transaction() {
+                @Override
+                public void execute(@NonNull Realm realm) {
+                    Journey journey = realm.where(Journey.class)
+                            .equalTo(Journey.FIELD_ID, journeyId).findFirst();
+                    if (journey != null) {
+                        journey.setStartAddress(address);
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * Sets the end address for the {@link Journey} with the given {@link Journey#id} identifier.
+     *
+     * @param journeyId the {@link Journey#id}.
+     * @param address the {@link Journey#endAddress}.
+     */
+    private void setJourneyEndAddress(final String journeyId, final String address) {
+
+        // Check if the address is for the current journey. This is because the user could have
+        // Started a new journey since the lookup address request.
+        if (mJourney != null && TextUtils.equals(mJourney.getId(), journeyId)) {
+
+            //Begin Realm transaction to update the journey. Realm transactions are compulsory.
+            mRealm.beginTransaction();
+
+            // Update the journey end address asynchronously.
+            mJourney.setEndAddress(address);
+
+            // update flag to stop further start location address lookup.
+            mIsEndLocationAddressFetched = true;
+
+            // Commit transactions.
+            mRealm.commitTransaction();
+
+        } else {
+            // Address belongs to a different journey.
+            // Update the journey from the Realm store.
+
+            mRealm.executeTransactionAsync(new Realm.Transaction() {
+                @Override
+                public void execute(@NonNull Realm realm) {
+                    Journey journey = realm.where(Journey.class)
+                            .equalTo(Journey.FIELD_ID, journeyId).findFirst();
+                    if (journey != null) {
+                        journey.setEndAddress(address);
+                    }
+                }
+            });
+        }
+    }
+
     /**
      * Receives address results from the {@link FetchAddressIntentService}.
      */
@@ -429,10 +550,25 @@ public class FlowLocationService extends Service {
 
             // Get the address string
             // or an error message sent from the intent service.
-            final String message = resultData.getString(Constants.RESULT_DATA_KEY);
+            final String resultString = resultData.getString(Constants.RESULT_DATA_KEY);
 
             if (resultCode == Constants.SUCCESS_RESULT) {
-                Toast.makeText(FlowLocationService.this, message, Toast.LENGTH_SHORT).show();
+                // Check the location address lookup requested: Start or end address.
+                final int addressRequestCode = resultData.getInt(Constants.ADDRESS_LOOKUP);
+
+                // Get the journey Id. Used to pass the address to the appropriate journey.
+                final String journeyId = resultData.getString(Constants.JOURNEY_ID_ADDRESS_LOOK);
+
+                switch (addressRequestCode) {
+                    case Constants.START_ADDRESS_LOOKUP:
+                        setJourneyStartAddress(journeyId, resultString);
+                        break;
+                    case Constants.END_ADDRESS_LOOK_UP:
+                        setJourneyEndAddress(journeyId, resultString);
+                }
+            } else {
+                // Request failed.
+                Toast.makeText(FlowLocationService.this, resultString, Toast.LENGTH_SHORT).show();
             }
         }
     }

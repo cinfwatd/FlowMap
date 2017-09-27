@@ -41,4 +41,10 @@ public final class Constants {
             ".RESULT_DATA_KEY";
     public static final String LOCATION_DATA_EXTRA = PACKAGE_NAME +
             ".LOCATION_DATA_EXTRA";
+
+    // Request Codes used for address lookup.
+    public static final String ADDRESS_LOOKUP = "ADDRESS_LOOKUP";
+    public static final String JOURNEY_ID_ADDRESS_LOOK = "JOURNEY_ID";
+    public static final int START_ADDRESS_LOOKUP = 101;
+    public static final int END_ADDRESS_LOOK_UP = 102;
 }

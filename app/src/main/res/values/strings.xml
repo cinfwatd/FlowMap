@@ -23,6 +23,8 @@
     <string name="no_location_data_provided">No location data provided.</string>
     <string name="app_location_service_description">FlowMap location service.</string>
     <string name="app_fetch_address_service_description">FlowMap location address service.</string>
+    <string name="error_no_adddress_request_code">Address request code was not specified.</string>
+    <string name="error_no_journey_id">Journey Id not specified.</string>
 
     <plurals name="days">
         <item quantity="one">%d day,</item>
