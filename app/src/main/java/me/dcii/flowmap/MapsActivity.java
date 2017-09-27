@@ -499,7 +499,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             return;
         }
 
-        mJourney = mRealm.where(Journey.class).equalTo(Journey.FIELD_ID, mJourneyId).findFirst();
+        mJourney = mRealm.where(Journey.class).equalTo(Journey.FIELD_ID, id).findFirst();
         // Check to make sure the mJourney exist.
         if (mJourney == null) {
             return;
